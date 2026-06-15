@@ -1348,8 +1348,18 @@ def extract_foundry_classes(existing_classes):
         return []
     have = {c['name'].lower() for c in existing_classes}
     by_name = {c['name']: c for c in existing_classes}
+    nedb_classes = load_nedb('classes')
     nedb_desc = {d['name'].lower(): (d.get('system', {}).get('description') or {}).get('value') or ''
-                 for d in load_nedb('classes')}
+                 for d in nedb_classes}
+    # per-level class features (the "Special" column) from classAssociations links
+    features_by_class = {}
+    for d in nedb_classes:
+        bylvl = {}
+        for a in ((d.get('system', {}).get('links') or {}).get('classAssociations') or []):
+            lvl, nm = a.get('level'), a.get('name')
+            if lvl and nm:
+                bylvl.setdefault(int(lvl), []).append(nm)
+        features_by_class[d['name'].lower()] = bylvl
     out = []
     import glob as _glob
     for path in sorted(_glob.glob(os.path.join(FOUNDRY_YAML, 'classes', '*.yaml'))):
@@ -1373,6 +1383,7 @@ def extract_foundry_classes(existing_classes):
             elif prog_kind == 'low':
                 donor = by_name.get('Paladin')
         saves = {k: (v or {}).get('value') for k, v in (s.get('savingThrows') or {}).items()}
+        feats_by_lvl = features_by_class.get(name.lower(), {})
         prog = []
         for lvl in range(1, 21):
             row = {
@@ -1381,7 +1392,7 @@ def extract_foundry_classes(existing_classes):
                 'fort': 2 + lvl // 2 if saves.get('fort') == 'high' else lvl // 3,
                 'ref': 2 + lvl // 2 if saves.get('ref') == 'high' else lvl // 3,
                 'will': 2 + lvl // 2 if saves.get('will') == 'high' else lvl // 3,
-                'special': '',
+                'special': ', '.join(feats_by_lvl.get(lvl, [])),
             }
             if donor and donor.get('prog'):
                 drow = next((p for p in donor['prog'] if p['level'] == lvl), None)
@@ -1398,9 +1409,11 @@ def extract_foundry_classes(existing_classes):
         srcs = s.get('sources') or []
         src = PZO_BOOKS.get((srcs[0] or {}).get('id') if srcs else None, COMPENDIUM_SRC)
         desc_html = nedb_desc.get(name.lower()) or (s.get('description') or {}).get('value') or ''
-        note = ('<p class="pf-desc"><i>Numeric progression synthesized from the class\'s standard '
-                'BAB/save/casting categories%s.</i></p>' %
-                ('; spell slots use the standard %s-progression table' % casting.get('progression') if donor else ''))
+        has_feats = any(feats_by_lvl.values())
+        note = ('<p class="pf-desc"><i>BAB and saves derived from the class\'s standard '
+                'categories%s%s.</i></p>' %
+                ('; spell slots use the standard %s-progression table' % casting.get('progression') if donor else '',
+                 '; class features per level shown in the Special column' if has_feats else ''))
         out.append({
             'name': name,
             'source': src,
