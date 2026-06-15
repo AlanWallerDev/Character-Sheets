@@ -98,11 +98,6 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 
 ## Known limits
 
-- The 12 post-PRD classes (Psychic, Kineticist, Vigilante, Shifter, unchained variants, …) carry
-  full descriptions and accurate class skills/HD/saves/BAB, but their level-table numbers are
-  synthesized from the standard progression formulas (casters use the standard 9/6/4-level
-  spells-per-day tables — exact for most, approximate for Medium's unique table). The per-level
-  "Special" column for these classes lives in the class description text.
 - Archetypes and alternate racial traits cover the PRD books; post-2014 softcover archetypes
   aren't included (add via Homebrew if needed).
 - Archetypes are informational — the app shows their rules text but doesn't automatically swap
