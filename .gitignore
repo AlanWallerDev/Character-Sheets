@@ -1,0 +1,15 @@
+# --- Source-data downloads & extracts (regenerable; too large for GitHub) ---
+# build_data.py consumes these to generate data/*.js, which ARE committed.
+# To rebuild, re-download the sources (see README) then run: python build_data.py
+psrd-data.zip
+pf1-system.zip
+foundry-packs.tar.gz
+/psrd/
+/foundry/
+/foundry-db/
+/pfu/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*.log
