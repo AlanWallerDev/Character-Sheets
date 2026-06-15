@@ -16,7 +16,11 @@ const PDF = (() => {
   };
 
   function exportSheet(c) {
-    if (!window.jspdf) { alert('PDF library not loaded (check the vendor/ folder).'); return; }
+    if (!window.jspdf) {
+      const msg = 'PDF library not loaded (check the vendor/ folder).';
+      if (window.UI && window.UI.alert) window.UI.alert(msg, { title: 'PDF export' }); else alert(msg);
+      return;
+    }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
     const pageW = doc.internal.pageSize.getWidth();

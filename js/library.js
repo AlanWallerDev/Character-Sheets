@@ -403,11 +403,10 @@ const Library = (() => {
         }));
       const delBtn = container.querySelector('#lib-del-custom');
       if (delBtn) delBtn.addEventListener('click', () => {
-        if (confirm(`Delete homebrew entry "${selected.name}" from the database?`)) {
-          Custom.remove(state.type, selected.name);
-          selected = null;
-          draw();
-        }
+        const doDelete = () => { Custom.remove(state.type, selected.name); selected = null; draw(); };
+        const msg = `Delete homebrew entry "${selected.name}" from the database?`;
+        if (window.UI && window.UI.confirm) window.UI.confirm(msg, doDelete, { title: 'Delete homebrew', danger: true, okLabel: 'Delete' });
+        else if (confirm(msg)) doDelete();
       });
     }
     draw();

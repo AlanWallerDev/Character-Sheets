@@ -190,7 +190,7 @@
           const c = patch(JSON.parse(r.result));
           c.id = 'pc_' + Date.now().toString(36);
           characters.push(c); save(); render();
-        } catch (err) { alert('Could not read character file: ' + err.message); }
+        } catch (err) { uiAlert('Could not read character file: ' + err.message, { title: 'Import failed' }); }
       };
       r.readAsText(f);
     });
@@ -220,12 +220,12 @@
     grid.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
       const c = characters.find(x => x.id === b.dataset.del);
-      if (confirm(`Delete ${c.name}? This cannot be undone.`)) {
+      uiConfirm(`Delete ${c.name}? This cannot be undone.`, () => {
         characters = characters.filter(x => x.id !== c.id);
         deletedIds.add(c.id);
         if (state.charId === c.id) state.charId = null;
         save(); render();
-      }
+      }, { title: 'Delete character', danger: true, okLabel: 'Delete' });
     }));
     grid.querySelectorAll('.char-card').forEach(card => card.addEventListener('click', () => {
       state.charId = card.dataset.id; state.view = 'builder'; state.builderTab = 'profile'; render();
@@ -267,7 +267,7 @@
       try {
         await exportSheetPDF(c);
       } catch (err) {
-        alert('PDF generation failed (' + err.message + ').\nYou can use Print → "Save as PDF" instead.');
+        uiAlert('PDF generation failed (' + err.message + ').\nYou can use Print → "Save as PDF" instead.', { title: 'PDF export' });
       }
       btn.disabled = false;
       btn.textContent = '⬇ Download PDF';
@@ -459,12 +459,13 @@
   }
 
   // generic modal shell for the play-tab forms
-  function openModal(title, bodyHTML) {
+  function openModal(title, bodyHTML, opts = {}) {
     const root = document.getElementById('modal-root');
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-    overlay.innerHTML = `<div class="modal" style="height:auto;max-height:90vh;overflow-y:auto">
-      <h3><button class="modal-close" id="mdl-x">Cancel</button>${esc(title)}</h3>
+    const widthStyle = opts.width ? `width:${opts.width};` : '';
+    overlay.innerHTML = `<div class="modal" style="height:auto;max-height:90vh;overflow-y:auto;${widthStyle}">
+      <h3><button class="modal-close" id="mdl-x">${esc(opts.closeLabel || 'Cancel')}</button>${esc(title)}</h3>
       <div id="mdl-body">${bodyHTML}</div></div>`;
     root.appendChild(overlay);
     const close = () => { if (overlay.parentNode) root.removeChild(overlay); };
@@ -472,6 +473,54 @@
     overlay.querySelector('#mdl-x').addEventListener('click', close);
     return { overlay, close, body: overlay.querySelector('#mdl-body') };
   }
+
+  // styled replacements for the browser's native confirm()/prompt()/alert()
+  function uiConfirm(message, onConfirm, opts = {}) {
+    const m = openModal(opts.title || 'Please confirm', `
+      <p>${esc(message).replace(/\n/g, '<br>')}</p>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+        <button id="uc-cancel">Cancel</button>
+        <button id="uc-ok" class="${opts.danger ? 'danger' : 'primary'}">${esc(opts.okLabel || 'OK')}</button>
+      </div>`, { width: '420px', closeLabel: '✕' });
+    m.body.querySelector('#uc-cancel').addEventListener('click', m.close);
+    m.body.querySelector('#uc-ok').addEventListener('click', () => { m.close(); onConfirm(); });
+    m.body.querySelector('#uc-ok').focus();
+  }
+
+  // fields: [{ key, label, placeholder, value, type }]; onOk receives {key: value}
+  function uiPrompt(title, fields, onOk, opts = {}) {
+    const m = openModal(title, `
+      ${(opts.intro ? `<p class="small muted">${esc(opts.intro)}</p>` : '')}
+      ${fields.map(f => `<div class="field"><label>${esc(f.label)}</label>
+        <input id="up-${f.key}" type="${f.type || 'text'}" placeholder="${esc(f.placeholder || '')}" value="${esc(f.value != null ? f.value : '')}"></div>`).join('')}
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+        <button id="up-cancel">Cancel</button>
+        <button id="up-ok" class="primary">${esc(opts.okLabel || 'OK')}</button>
+      </div>`, { width: '440px', closeLabel: '✕' });
+    const submit = () => {
+      const vals = {};
+      fields.forEach(f => { vals[f.key] = m.body.querySelector('#up-' + f.key).value.trim(); });
+      const req = fields.find(f => f.required !== false);  // first field required by default
+      if (req && !vals[req.key]) { m.body.querySelector('#up-' + req.key).focus(); return; }
+      m.close(); onOk(vals);
+    };
+    m.body.querySelector('#up-ok').addEventListener('click', submit);
+    m.body.querySelector('#up-cancel').addEventListener('click', m.close);
+    m.body.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); }));
+    const first = m.body.querySelector('input'); if (first) first.focus();
+  }
+
+  function uiAlert(message, opts = {}) {
+    const m = openModal(opts.title || 'Notice', `
+      <p>${esc(message).replace(/\n/g, '<br>')}</p>
+      <div style="margin-top:14px;text-align:right"><button id="ua-ok" class="primary">OK</button></div>`,
+      { width: '420px', closeLabel: '✕' });
+    m.body.querySelector('#ua-ok').addEventListener('click', m.close);
+    m.body.querySelector('#ua-ok').focus();
+  }
+
+  // expose for the other modules (library.js, pdf.js) so dialogs are uniform site-wide
+  window.UI = { confirm: uiConfirm, prompt: uiPrompt, alert: uiAlert, modal: openModal };
 
   // effect targets and bonus types shared by the buff form (must match engine.effective)
   const BUFF_TARGETS = [
@@ -985,11 +1034,14 @@
       save(); render();
     }));
     $('#add-counter').addEventListener('click', () => {
-      const name = prompt('Tracker name (e.g. "Wand of CLW", "Arrows", "Rage rounds"):');
-      if (!name) return;
-      const max = parseInt(prompt('Maximum (blank for none):') || '0', 10) || 0;
-      p.counters.push({ name, cur: max || 0, max });
-      save(); render();
+      uiPrompt('Add Tracker', [
+        { key: 'name', label: 'Name', placeholder: 'Wand of CLW, Arrows, Rage rounds…' },
+        { key: 'max', label: 'Maximum (optional)', type: 'number', placeholder: 'blank for none', required: false },
+      ], vals => {
+        const max = parseInt(vals.max, 10) || 0;
+        p.counters.push({ name: vals.name, cur: max || 0, max });
+        save(); render();
+      });
     });
     main.querySelectorAll('[data-cntmod]').forEach(b => b.addEventListener('click', () => {
       const [i, d] = b.dataset.cntmod.split(':');
@@ -1329,8 +1381,9 @@
       save(); render();
     }));
     main.querySelectorAll('[data-spec]').forEach(b => b.addEventListener('click', () => {
-      const spec = prompt(`${b.dataset.spec} specialty (e.g. weaponsmithing, sailor, oratory):`);
-      if (spec) { c.skills[`${b.dataset.spec} (${spec})`] = 1; save(); render(); }
+      uiPrompt(`${b.dataset.spec} specialty`, [
+        { key: 'spec', label: 'Specialty', placeholder: 'weaponsmithing, sailor, oratory…' },
+      ], vals => { c.skills[`${b.dataset.spec} (${vals.spec})`] = 1; save(); render(); });
     }));
     main.querySelectorAll('[data-csk]').forEach(el => el.addEventListener('change', () => {
       const name = el.dataset.csk;
@@ -1520,8 +1573,9 @@
     $('#add-armor').addEventListener('click', () => Library.pickModal('armors', 'Add Armor or Shield', e => addGear(e, 'armor')));
     $('#add-item').addEventListener('click', () => Library.pickModal('items', 'Add Item', e => addGear(e, 'item')));
     $('#add-custom').addEventListener('click', () => {
-      const name = prompt('Item name:');
-      if (name) { c.gear.push({ name, kind: 'custom', qty: 1, weight: 0, note: '' }); save(); render(); }
+      uiPrompt('Add Custom Item', [
+        { key: 'name', label: 'Item name', placeholder: 'e.g. Mysterious Locket' },
+      ], vals => { c.gear.push({ name: vals.name, kind: 'custom', qty: 1, weight: 0, note: '' }); save(); render(); });
     });
     for (const [id, key] of [['m-pp', 'pp'], ['m-gp', 'gp'], ['m-sp', 'sp'], ['m-cp', 'cp']]) {
       bind(id, c, v => c.money[key] = parseInt(v, 10) || 0);
