@@ -1,9 +1,8 @@
 # Character Sheets — Pathfinder 1e Character Vault
 
-A local, offline web app for creating, managing, and *playing* Pathfinder First Edition
+A local, offline web app for creating, managing, and playing Pathfinder 1e
 characters, with the published rules content compiled in from freely available, OGL-licensed
-datasets. No install, no account, no server — it's a static site and all of your data stays in
-your browser.
+datasets. 
 
 ## Running it
 
@@ -14,10 +13,6 @@ Everything is static — open it however you like:
 
 Characters are saved automatically in your browser (localStorage). Use **Export** on a
 character card to back one up as a JSON file, and **Import JSON** to restore or share.
-
-On narrow screens (phones, small windows) the layout adapts, and the side menu can be collapsed
-with **« Hide menu** to free up space — a floating **☰** button brings it back. The preference
-is remembered.
 
 ## What's included
 
@@ -34,14 +29,12 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 | Classes (core, base, hybrid, occult, vigilante, shifter, unchained, prestige, NPC) | 67 |
 | Archetypes | 386 |
 | Feats — the complete corpus from all 165 books | 3,695 |
-| Spells (class lists, schools, full descriptions; incl. all psychic magic) | 2,944 |
+| Spells (class lists, schools, full descriptions) | 2,944 |
 | Equipment & magic items | 3,354 |
 | Weapons / armor with full stat blocks | 603 / 102 |
 | Playable races | 79 |
-| Alternate racial traits | 293 |
 | Character traits | 226 |
 | Skills | 26 |
-| Buffs & spell effects (25 curated + the full spell library) | ~2,950 |
 | Companion species (animal companions, familiars, eidolon forms) | 69 + |
 
 ## Features
@@ -49,16 +42,8 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 ### Building a character
 
 - **Roster** — multiple characters, duplicate, export/import JSON, print.
-- **Abilities** — point buy (with budget tracking), 4d6 roller, or manual; racial modifiers
-  (including flexible "+2 any" races), level increases and enhancement bonuses tracked separately.
-- **Race** — every race with parsed size, speed, languages and racial traits; alternate racial
-  trait picker.
 - **Classes** — level-by-level multiclassing, archetype notes, favored class bonuses,
-  average/rolled/max HP, full progression tables in-app. The class dropdown remembers your last
-  pick so adding several levels in a row is quick.
-- **Skills** — per-rank tracking with class-skill +3, armor check penalty, ability mods and
-  point-budget validation (incl. favored class and human bonus ranks). Any skill can be toggled
-  as a class skill (for traits/archetypes/homebrew), and you can add custom skills.
+  average/rolled/max HP, full progression tables in-app.
 - **Feats & traits** — searchable pickers with full benefit text. The feat picker **evaluates
   prerequisites against your character** (✓/✗/? per feat — ability scores, BAB, feat chains,
   skill ranks, class/caster levels, spellcasting; class features it can't verify show "?"),
@@ -66,8 +51,7 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   base feat. You can still take feats you don't qualify for — they're flagged ⚠ with the unmet
   requirements on the Feats tab and the printed sheet, and the hover popover shows the
   clause-by-clause check.
-- **Spells** — slots per day including ability-bonus slots, save DCs, spells known for
-  spontaneous casters, and a spell browser filtered to your class's list.
+- **Spells** 
 - **Gear** — weapons/armor/items with real stats; AC, max Dex, ACP, speed and encumbrance
   computed from what you equip; money tracking. Each weapon/armor has an **✨ enchantment**
   editor (enhancement bonus, masterwork, special abilities, bonus damage dice) that feeds attack,
@@ -85,8 +69,7 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   button (restores slots, clears nonlethal, heals level HP — and heals companions their HD).
   - **Buffs & conditions** with proper bonus-type stacking that live-update AC, saves, attacks,
     skills and speed. The **+ Buff / Spell Effect** picker covers the **entire spell database**
-    (~2,950 entries, searchable by class/level/school): the 25 hand-curated effects (Haste,
-    Bull's Strength…) carry precise mechanics, and every other spell has its bonuses **auto-parsed
+    (~2,950 entries, searchable by class/level/school): every spell has its bonuses **auto-parsed
     from its description**; anything the parser can't read is still addable as a tracked effect and
     refined with "edit". All 16 standard conditions and a from-scratch custom builder round it out.
   - **Custom roll buttons** in four flavors: an **Attack** that scales with your BAB, ability,
@@ -94,7 +77,7 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
     maneuver** (d20 + a live ability modifier, optionally +BAB), a fixed **d20 + modifier**, or a
     **flat dice** roll like `3d6` / `8d6`.
   - **Click-to-roll** chips for initiative, saves, attacks (with damage dice) and skills, with a
-    nat-20/nat-1 aware roll log; **trackers** for charges/ammo/rage rounds; and an **ammunition**
+    nat-20/nat-1 aware roll log; **trackers** for charges/rage rounds; and an **ammunition**
     counter with −/＋ for shots fired.
   - **Companions fight too** — each gets its own HP tracker, roll chips parsed from its stat block,
     quick Atk/Dmg/AC/Saves adjustments, and custom attacks that scale with its stats.
@@ -142,19 +125,6 @@ where `build_data.py` expects, then run:
 ```
 python build_data.py
 ```
-
-## Hosting
-
-It's a static site with relative paths, so any static host works and updates are just a push:
-
-- **GitHub Pages** — Settings → Pages → deploy from `main` / root. Push to update.
-- **Cloudflare Pages / Netlify** — connect the repo, no build command, output dir `/`; adds a
-  custom domain and Brotli compression.
-
-Over the wire the dataset is ~3.3 MB gzipped (≈2.7 MB with Brotli) and cached after the first
-load; the `?v=` query strings on the script/style tags ensure clients pick up updates. Saved
-characters live in localStorage keyed to the site's origin, so deploying updates to the same URL
-never wipes anyone's characters.
 
 ## License & attribution
 
