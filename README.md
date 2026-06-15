@@ -144,19 +144,6 @@ where `build_data.py` expects, then run:
 python build_data.py
 ```
 
-## Hosting
-
-It's a static site with relative paths, so any static host works and updates are just a push:
-
-- **GitHub Pages** — Settings → Pages → deploy from `main` / root. Push to update.
-- **Cloudflare Pages / Netlify** — connect the repo, no build command, output dir `/`; adds a
-  custom domain and Brotli compression.
-
-Over the wire the dataset is ~3.3 MB gzipped (≈2.7 MB with Brotli) and cached after the first
-load; the `?v=` query strings on the script/style tags ensure clients pick up updates. Saved
-characters live in localStorage keyed to the site's origin, so deploying updates to the same URL
-never wipes anyone's characters.
-
 ## License & attribution
 
 All game content is Open Game Content under the OGL v1.0a, sourced from the community datasets
