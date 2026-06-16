@@ -13,6 +13,7 @@
   try { characters = JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (e) { characters = []; }
 
   // Merge-on-save so two open tabs can't silently clobber each other's characters.
+  let storageWarned = false;
   function save() {
     const c = current();
     if (c) c.updated = Date.now();
@@ -25,7 +26,36 @@
     }
     for (const id of deletedIds) byId.delete(id);
     characters = [...byId.values()].map(patch);
-    localStorage.setItem(STORE, JSON.stringify(characters));
+    try {
+      localStorage.setItem(STORE, JSON.stringify(characters));
+    } catch (err) {
+      // quota exceeded, private-mode, or storage disabled — the change is in memory only
+      if (!storageWarned && typeof uiAlert === 'function') {
+        storageWarned = true;
+        uiAlert('Your changes could not be saved to this browser\'s storage' +
+          (/quota/i.test(err.message) ? ' (it\'s full)' : '') +
+          '. Use Export on the character card to save a backup file before closing this tab.',
+          { title: 'Could not save' });
+      }
+    }
+  }
+
+  // merged UI preferences (sidebar state, dismissed notices) in one localStorage key
+  const UI_PREF = 'pf1e.vault.ui';
+  function loadUiPrefs() { try { return JSON.parse(localStorage.getItem(UI_PREF) || '{}'); } catch (e) { return {}; } }
+  function saveUiPref(key, val) {
+    const p = loadUiPrefs(); p[key] = val;
+    try { localStorage.setItem(UI_PREF, JSON.stringify(p)); } catch (e) { /* non-critical */ }
+  }
+
+  function exportCharacter(c) {
+    if (!c) return;
+    const blob = new Blob([JSON.stringify(c, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (c.name || 'character').replace(/[^\w\- ]/g, '').trim() + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   window.addEventListener('storage', e => {
@@ -35,23 +65,33 @@
   });
 
   let state = { view: 'roster', charId: null, builderTab: 'profile' };
-  try { state.sidebarHidden = JSON.parse(localStorage.getItem('pf1e.vault.ui') || '{}').sidebarHidden || false; }
-  catch (e) { state.sidebarHidden = false; }
+  state.sidebarHidden = loadUiPrefs().sidebarHidden || false;
   const current = () => characters.find(c => c.id === state.charId) || null;
 
   function setSidebarHidden(v) {
     state.sidebarHidden = v;
-    localStorage.setItem('pf1e.vault.ui', JSON.stringify({ sidebarHidden: v }));
+    saveUiPref('sidebarHidden', v);
     render();
   }
 
-  // migrate/patch loaded characters with any new fields
+  // migrate/patch loaded characters with new fields, and coerce malformed shapes
+  // (a bad hand-edited or imported file shouldn't be able to crash the app)
   function patch(c) {
+    if (!c || typeof c !== 'object') c = {};
     const fresh = PF.newCharacter('');
-    for (const k of Object.keys(fresh)) if (c[k] === undefined) c[k] = fresh[k];
+    for (const k of Object.keys(fresh)) {
+      const def = fresh[k];
+      if (c[k] === undefined) { c[k] = def; continue; }
+      // ensure structural fields have the right container type
+      if (Array.isArray(def) && !Array.isArray(c[k])) c[k] = def;
+      else if (def && typeof def === 'object' && !Array.isArray(def) &&
+               (typeof c[k] !== 'object' || c[k] === null || Array.isArray(c[k]))) c[k] = def;
+    }
+    if (typeof c.name !== 'string' || !c.name) c.name = 'Unnamed';
+    if (!c.id) c.id = 'pc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     return c;
   }
-  characters.forEach(patch);
+  characters = (Array.isArray(characters) ? characters : []).map(patch);
 
   // ---------------- shell ----------------
   // Re-renders rebuild the whole DOM; keep the user's place when the view is unchanged.
@@ -107,7 +147,7 @@
         ` : ''}
         <div class="nav-item ${state.view === 'library' ? 'active' : ''}" data-nav="library" style="border-top:1px solid var(--border);margin-top:6px">📚 Rules Library</div>
         <div class="spacer"></div>
-        <div class="foot">All 16 PRD books compiled from the community PSRD dataset (OGL). Data stays in your browser.</div>
+        <div class="foot">Open Game Content under the OGL v1.0a. Your characters are stored only in this browser.</div>
       </div>
       <div class="main" id="main"></div>`;
 
@@ -120,11 +160,36 @@
       el.addEventListener('click', () => { state.view = 'builder'; state.builderTab = el.dataset.tab; render(); }));
 
     const main = $('#main');
-    if (state.view === 'roster') renderRoster(main);
-    else if (state.view === 'library') Library.render(main, {});
-    else if (state.view === 'sheet' && c) renderSheet(main, c);
-    else if (state.view === 'builder' && c) renderBuilder(main, c);
-    else renderRoster(main);
+    try {
+      if (state.view === 'roster') renderRoster(main);
+      else if (state.view === 'library') Library.render(main, {});
+      else if (state.view === 'sheet' && c) renderSheet(main, c);
+      else if (state.view === 'builder' && c) renderBuilder(main, c);
+      else renderRoster(main);
+    } catch (err) {
+      console.error('render error', err);
+      main.innerHTML = `<div class="panel">
+        <h2 class="err">Something went wrong displaying this view</h2>
+        <p>${c ? 'Character "' + esc(c.name) + '" couldn\'t be displayed' : 'This view couldn\'t be displayed'}.
+           The rest of your data is safe — nothing was deleted.</p>
+        <p class="small muted">Technical detail: ${esc(err.message)}</p>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="primary" id="err-roster">← Back to Characters</button>
+          ${c ? '<button id="err-export">Export this character (backup)</button>' : ''}
+          ${c ? '<button class="danger" id="err-del">Delete this character</button>' : ''}
+        </div></div>`;
+      const back = main.querySelector('#err-roster');
+      if (back) back.onclick = () => { state.view = 'roster'; state.charId = null; render(); };
+      const exp = main.querySelector('#err-export');
+      if (exp && c) exp.onclick = () => exportCharacter(c);
+      const del = main.querySelector('#err-del');
+      if (del && c) del.onclick = () => uiConfirm(`Delete "${c.name}"? This cannot be undone.`, () => {
+        characters = characters.filter(x => x.id !== c.id);
+        deletedIds.add(c.id);
+        state.view = 'roster'; state.charId = null;
+        save(); render();
+      }, { title: 'Delete character', danger: true, okLabel: 'Delete' });
+    }
 
     // restore the user's place after an in-place update
     if (detailsState) {
@@ -146,32 +211,54 @@
 
   // ---------------- roster ----------------
   function renderRoster(main) {
+    const showBackupNote = !loadUiPrefs().seenBackupNote && characters.length;
     main.innerHTML = `
       <h2>Characters</h2>
+      ${showBackupNote ? `<div class="panel no-print" id="backup-note" style="border-color:var(--accent);display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:1.3em">💾</span>
+        <div style="flex:1"><b>Your characters live only in this browser.</b>
+          Clearing your browser data (or switching devices/browsers) will lose them. Use <b>Export</b>
+          on a character to save a backup file, and <b>Import JSON</b> to restore it anywhere.</div>
+        <button class="small" id="backup-dismiss">Got it</button>
+      </div>` : ''}
       <div class="no-print" style="display:flex;gap:8px">
         <button class="primary" id="new-char">+ New Character</button>
         <button id="import-char">Import JSON</button>
         <input type="file" id="import-file" accept=".json" style="display:none">
       </div>
       <div class="roster-grid" id="roster"></div>`;
+    const dismiss = $('#backup-dismiss');
+    if (dismiss) dismiss.addEventListener('click', () => { saveUiPref('seenBackupNote', true); render(); });
     const grid = $('#roster');
     if (!characters.length) {
       grid.innerHTML = '<p class="muted">No characters yet. Create one to get started!</p>';
     } else {
       grid.innerHTML = characters.map(c => {
-        const cls = [...PF.classLevels(c)].map(([k, v]) => k + ' ' + v).join(' / ') || 'No class';
-        return `<div class="char-card" data-id="${c.id}">
-          <h3>${esc(c.name)}</h3>
-          <div class="meta">${esc([c.race || 'No race', cls].join(' — '))}</div>
-          <div class="meta small">Level ${c.levels.length} • Updated ${new Date(c.updated).toLocaleDateString()}</div>
-          <div class="actions no-print">
-            <button class="small" data-open="${c.id}">Open</button>
-            <button class="small" data-sheet="${c.id}">Sheet</button>
-            <button class="small" data-export="${c.id}">Export</button>
-            <button class="small" data-copy="${c.id}">Duplicate</button>
-            <button class="small danger" data-del="${c.id}">Delete</button>
-          </div>
-        </div>`;
+        try {
+          const cls = [...PF.classLevels(c)].map(([k, v]) => k + ' ' + v).join(' / ') || 'No class';
+          return `<div class="char-card" data-id="${c.id}">
+            <h3>${esc(c.name)}</h3>
+            <div class="meta">${esc([c.race || 'No race', cls].join(' — '))}</div>
+            <div class="meta small">Level ${(c.levels || []).length} • Updated ${new Date(c.updated).toLocaleDateString()}</div>
+            <div class="actions no-print">
+              <button class="small" data-open="${c.id}">Open</button>
+              <button class="small" data-sheet="${c.id}">Sheet</button>
+              <button class="small" data-export="${c.id}">Export</button>
+              <button class="small" data-copy="${c.id}">Duplicate</button>
+              <button class="small danger" data-del="${c.id}">Delete</button>
+            </div>
+          </div>`;
+        } catch (err) {
+          // an individual character's data is corrupt — isolate it so the rest still load
+          return `<div class="char-card" data-id="${esc(c && c.id || '')}">
+            <h3 class="err">⚠ ${esc((c && c.name) || 'Unreadable character')}</h3>
+            <div class="meta small err">This character's data couldn't be read (${esc(err.message)}).</div>
+            <div class="actions no-print">
+              <button class="small" data-export="${esc(c && c.id || '')}">Export (backup)</button>
+              <button class="small danger" data-del="${esc(c && c.id || '')}">Delete</button>
+            </div>
+          </div>`;
+        }
       }).join('');
     }
     $('#new-char').addEventListener('click', () => {
@@ -203,12 +290,7 @@
     }));
     grid.querySelectorAll('[data-export]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
-      const c = characters.find(x => x.id === b.dataset.export);
-      const blob = new Blob([JSON.stringify(c, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = (c.name || 'character').replace(/[^\w\- ]/g, '') + '.json';
-      a.click();
+      exportCharacter(characters.find(x => x.id === b.dataset.export));
     }));
     grid.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
