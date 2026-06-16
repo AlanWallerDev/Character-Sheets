@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pf1echaractervault.zancar615.workers.dev/sitemap.xml
