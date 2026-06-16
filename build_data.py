@@ -1523,6 +1523,29 @@ def extract_pfu_feats(existing):
     mm = re.search(r'var manuals = `(.*?)`', man_raw, re.S)
     if mm:
         manuals = [l.strip() for l in mm.group(1).strip().split('\n')]
+
+    # referenced tables AND lists live in a separate file; feat text marks them as [[[N]]]
+    tables = []
+    tbl_path = os.path.join(PFU, 'tables.js')
+    if os.path.exists(tbl_path):
+        tbl_raw = open(tbl_path, encoding='utf-8').read()
+        tables = [t.replace('´´´', '"').strip()
+                  for t in re.findall(r'`(.*?)`', tbl_raw, re.S)]
+
+    def clean(s):
+        # this dataset uses triple acute accents as quotation marks
+        return (s or '').replace('´´´', '"')
+
+    def resolve_tables(html):
+        def repl(m):
+            i = int(m.group(1))
+            tbl = tables[i] if 0 <= i < len(tables) else ''
+            return ('</p>' + tbl + '<p>') if tbl else ''
+        return re.sub(r'\[\[\[(\d+)\]\]\]', repl, html)
+
+    def field(s):  # cleaned, paragraph-wrapped, with any table references inlined
+        return resolve_tables(para_html(clean(s)))
+
     out = []
     body = re.search(r'var feats\d* = `(.*?)`', raw, re.S)
     if not body:
@@ -1552,16 +1575,17 @@ def extract_pfu_feats(existing):
         source = re.sub(r'\s*\(\d{4}\)$', '', source)
         page = f[28].strip() if len(f) > 28 else ''
         special = ' '.join(x for x in [f[17], f[21]] if x.strip())
+        nomark = lambda s: re.sub(r'\[\[\[\d+\]\]\]', '', clean(s)).strip()
         out.append({
             'name': name,
             'source': source + ((' p.' + page) if page else ''),
             'types': types or ['General'],
-            'desc': f[12].strip(),
-            'prereq': f[14].strip(),
-            'benefit': para_html(f[15]),
-            'normal': para_html(f[16]),
-            'special': para_html(special),
-            'body': para_html(f[13]) if f[13].strip() and f[13] != f[15] else '',
+            'desc': nomark(f[12]),
+            'prereq': nomark(f[14]),
+            'benefit': field(f[15]),
+            'normal': field(f[16]),
+            'special': field(special),
+            'body': field(f[13]) if f[13].strip() and f[13] != f[15] else '',
         })
     return out
 

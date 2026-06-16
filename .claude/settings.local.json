@@ -56,7 +56,8 @@
       "Bash(pip install *)",
       "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && sed -i 's|js/app.js?v=15|js/app.js?v=16|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)",
       "Bash(awk '{printf \"%.1f MB  %s\\\\n\", $1/1048576, $2}')",
-      "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && sed -i 's|js/app.js?v=20|js/app.js?v=21|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)"
+      "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && sed -i 's|js/app.js?v=20|js/app.js?v=21|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)",
+      "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && sed -i 's|data/feats.js?v=3|data/feats.js?v=4|' index.html && grep -oE 'data/feats\\\\.js\\\\?v=[0-9]+' index.html)"
     ]
   }
 }
