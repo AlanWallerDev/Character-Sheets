@@ -65,15 +65,34 @@
     if (state.view === 'roster') render();
   });
 
+  // narrow = sidebar becomes an overlay drawer instead of an inline column
+  const isNarrow = () => window.matchMedia('(max-width: 980px)').matches;
+
   let state = { view: 'roster', charId: null, builderTab: 'profile' };
-  state.sidebarHidden = loadUiPrefs().sidebarHidden || false;
+  // default the drawer closed on phones (where it would otherwise crush the
+  // content), open on desktop; an explicit user preference always wins.
+  const _sbPref = loadUiPrefs().sidebarHidden;
+  state.sidebarHidden = (_sbPref === undefined) ? isNarrow() : _sbPref;
   const current = () => characters.find(c => c.id === state.charId) || null;
 
-  function setSidebarHidden(v) {
+  // persist=false for responsive auto-toggles (tap-a-nav, backdrop, resize) so
+  // the saved preference reflects intent only, not viewport accidents.
+  function setSidebarHidden(v, persist = true) {
     state.sidebarHidden = v;
-    saveUiPref('sidebarHidden', v);
+    if (persist) saveUiPref('sidebarHidden', v);
     render();
   }
+
+  // re-render when crossing the narrow breakpoint so the drawer/inline layout
+  // stays coherent; auto-close the drawer when entering narrow.
+  let _wasNarrow = isNarrow();
+  window.addEventListener('resize', () => {
+    const n = isNarrow();
+    if (n === _wasNarrow) return;
+    _wasNarrow = n;
+    if (n) state.sidebarHidden = true;
+    render();
+  });
 
   // migrate/patch loaded characters with new fields, and coerce malformed shapes
   // (a bad hand-edited or imported file shouldn't be able to crash the app)
@@ -136,6 +155,7 @@
     ];
     app.innerHTML = `
       ${state.sidebarHidden ? '<button id="sb-open" class="sb-toggle no-print" title="Show menu">☰</button>' : ''}
+      ${(!state.sidebarHidden && isNarrow()) ? '<div class="sb-backdrop no-print"></div>' : ''}
       <div class="sidebar ${state.sidebarHidden ? 'collapsed' : ''}">
         <div class="logo">Pathfinder 1e<small>Character Vault</small></div>
         <div class="nav-item sb-hide" id="sb-hide">« Hide menu</div>
@@ -156,10 +176,12 @@
     const sbOpen = app.querySelector('#sb-open');
     if (sbOpen) sbOpen.addEventListener('click', () => setSidebarHidden(false));
     app.querySelector('#sb-hide').addEventListener('click', () => setSidebarHidden(true));
+    const sbBackdrop = app.querySelector('.sb-backdrop');
+    if (sbBackdrop) sbBackdrop.addEventListener('click', () => setSidebarHidden(true, false));
     app.querySelectorAll('[data-nav]').forEach(el =>
-      el.addEventListener('click', () => { state.view = el.dataset.nav; render(); }));
+      el.addEventListener('click', () => { state.view = el.dataset.nav; if (isNarrow()) state.sidebarHidden = true; render(); }));
     app.querySelectorAll('[data-tab]').forEach(el =>
-      el.addEventListener('click', () => { state.view = 'builder'; state.builderTab = el.dataset.tab; render(); }));
+      el.addEventListener('click', () => { state.view = 'builder'; state.builderTab = el.dataset.tab; if (isNarrow()) state.sidebarHidden = true; render(); }));
 
     const main = $('#main');
     try {
@@ -1318,14 +1340,18 @@
         <p class="small muted">Total = base + racial + level increases (+1 every 4 levels) + misc (belts, tomes, etc.).</p>
         <div class="grid2">
           <div><h4>Level increases (+1 each at levels 4, 8, 12, 16, 20 — you have ${Math.floor(c.levels.length / 4)})</h4>
-            ${PF.ABILITIES.map(ab => `<label style="margin-right:10px">${ab.toUpperCase()}
-              <input class="tiny" type="number" id="li-${ab}" value="${c.levelIncreases[ab] || 0}" min="0"></label>`).join('')}
-            <span class="${sumVals(c.levelIncreases) > Math.floor(c.levels.length / 4) ? 'err' : 'muted'} small">
-              (${sumVals(c.levelIncreases)} assigned)</span>
+            <div class="stat-mini-row">
+              ${PF.ABILITIES.map(ab => `<label class="stat-mini">${ab.toUpperCase()}
+                <input class="tiny" type="number" id="li-${ab}" value="${c.levelIncreases[ab] || 0}" min="0"></label>`).join('')}
+              <span class="${sumVals(c.levelIncreases) > Math.floor(c.levels.length / 4) ? 'err' : 'muted'} small">
+                (${sumVals(c.levelIncreases)} assigned)</span>
+            </div>
           </div>
           <div><h4>Misc / enhancement</h4>
-            ${PF.ABILITIES.map(ab => `<label style="margin-right:10px">${ab.toUpperCase()}
-              <input class="tiny" type="number" id="mi-${ab}" value="${c.abilityMisc[ab] || 0}"></label>`).join('')}
+            <div class="stat-mini-row">
+              ${PF.ABILITIES.map(ab => `<label class="stat-mini">${ab.toUpperCase()}
+                <input class="tiny" type="number" id="mi-${ab}" value="${c.abilityMisc[ab] || 0}"></label>`).join('')}
+            </div>
           </div>
         </div>
       </div>`;
