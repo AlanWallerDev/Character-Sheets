@@ -502,12 +502,32 @@ const PF = (() => {
       const v = parseInt((comp.abilityOverride || {})[k], 10);
       if (!isNaN(v)) out[k] = v;
     }
+    // fold in active-buff ability changes here so AC/saves/attacks all reflect them
+    const bt = compBuffTotals(comp);
+    for (const k of ABILITIES) out[k] += bt[k] || 0;
     return out;
   }
 
   // -> { lvl, hd, hdDie, bab, saves {fort,ref,will}, abilities {}, size, speed, natArmor, ac,
   //      attacks, hp, skills, feats, special, extras {} , warnings [] }
+  // wrapper: ability buffs are folded in via applyOverrides (inside _base, so AC/saves/attacks
+  // already reflect them); here we add the flat (non-ability) buff bonuses on top.
   function companionDerived(c, comp) {
+    const out = _companionDerivedBase(c, comp);
+    if (out && out.abilities) {
+      const bt = compBuffTotals(comp);
+      out.ac = (out.ac || 0) + bt.ac;
+      if (out.saves) {
+        out.saves.fort += bt.fort; out.saves.ref += bt.ref; out.saves.will += bt.will;
+      }
+      out.buffAtk = bt.attack;   // consumed by companionAttacks
+      out.buffDmg = bt.damage;
+      out.buffInit = bt.init;
+    }
+    return out;
+  }
+
+  function _companionDerivedBase(c, comp) {
     const D = PFDATA.companions || {};
     const out = { lvl: companionEffLevel(c, comp), warnings: [], extras: {} };
 
@@ -877,7 +897,24 @@ const PF = (() => {
 
   // ---------- companion play helpers ----------
   function newCompanionPlay() {
-    return { hpDamage: 0, atkMisc: 0, acMisc: 0, saveMisc: 0, dmgMisc: 0, note: '', customAttacks: [] };
+    return { hpDamage: 0, atkMisc: 0, acMisc: 0, saveMisc: 0, dmgMisc: 0, note: '', customAttacks: [], buffs: [] };
+  }
+
+  // stacked totals of a companion's own active buffs/conditions (same model as the character's)
+  function compBuffTotals(comp) {
+    const totals = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0,
+                     attack: 0, damage: 0, fort: 0, ref: 0, will: 0, ac: 0, init: 0 };
+    const active = ((comp.play || {}).buffs || []).filter(b => b.active);
+    if (!active.length) return totals;
+    const buckets = {};
+    for (const b of active) for (const ch of (b.changes || [])) (buckets[ch.target] = buckets[ch.target] || []).push(ch);
+    const t = k => buckets[k] ? stackTotal(buckets[k]) : 0;
+    for (const ab of ABILITIES) totals[ab] = t(ab);
+    totals.attack = t('attack'); totals.damage = t('damage'); totals.init = t('init');
+    const saves = t('saves');
+    totals.fort = t('fort') + saves; totals.ref = t('ref') + saves; totals.will = t('will') + saves;
+    totals.ac = t('armor') + t('natural') + t('deflection') + t('dodge') + t('acMisc');
+    return totals;
   }
 
   // parse "bite (1d6 plus trip), 2 claws (1d4)" or "bite +4 (1d3-4)" into rollable attacks
@@ -888,7 +925,8 @@ const PF = (() => {
     const strM = mod(d.abilities.str || 10);
     const dexM = mod(d.abilities.dex || 10);
     const finesse = comp.type === 'familiar' && dexM > strM;
-    const baseAtk = (d.bab || 0) + (finesse ? dexM : strM) + sizeM + ((comp.play || {}).atkMisc || 0);
+    const buffAtk = d.buffAtk || 0, buffDmg = d.buffDmg || 0;   // flat buff bonuses (Bless, Magic Fang…)
+    const baseAtk = (d.bab || 0) + (finesse ? dexM : strM) + sizeM + ((comp.play || {}).atkMisc || 0) + buffAtk;
     const src = d.attacks || '';
     for (let part of src.split(/[,;]/)) {
       part = part.trim();
@@ -902,7 +940,7 @@ const PF = (() => {
       if (!dm) continue;
       const dice = dm[1];
       // explicit damage modifier in the stat block (familiars) wins; otherwise add Str
-      const dmgMod = (dm[2] != null ? parseInt(dm[2].replace(/\s/g, ''), 10) : strM) + ((comp.play || {}).dmgMisc || 0);
+      const dmgMod = (dm[2] != null ? parseInt(dm[2].replace(/\s/g, ''), 10) : strM) + ((comp.play || {}).dmgMisc || 0) + buffDmg;
       const note = inParens.replace(/(\d*d\d+)\s*([+-]\s*\d+)?/, '').replace(/^\s*(plus|and)?\s*/, '').trim();
       for (let i = 0; i < Math.min(count, 4); i++) {
         out.push({
@@ -918,15 +956,15 @@ const PF = (() => {
     (comp.play || {}).customAttacks?.forEach((ca, idx) => {
       // legacy fixed-value attacks: {label, atk, dice}
       if (ca.atkAbility === undefined && ca.atk !== undefined) {
-        out.push({ label: ca.label, atk: (ca.atk || 0) + atkMiscPlay, dice: ca.dice || '',
+        out.push({ label: ca.label, atk: (ca.atk || 0) + atkMiscPlay + buffAtk, dice: ca.dice || '',
                    bonusDice: ca.bonusDice || '', note: 'custom', customIdx: idx });
         return;
       }
       // dynamic attacks: recompute from the companion's live stats + play adjustments
       const count = Math.max(1, Math.min(8, parseInt(ca.count, 10) || 1));
       const abMod = (ca.atkAbility && ca.atkAbility !== 'none') ? mod(d.abilities[ca.atkAbility] || 10) : 0;
-      const atk = (d.bab || 0) + abMod + sizeM + atkMiscPlay + (parseInt(ca.atkBonus, 10) || 0);
-      let dmgFlat = (parseInt(ca.dmgBonus, 10) || 0) + dmgMiscPlay;
+      const atk = (d.bab || 0) + abMod + sizeM + atkMiscPlay + (parseInt(ca.atkBonus, 10) || 0) + buffAtk;
+      let dmgFlat = (parseInt(ca.dmgBonus, 10) || 0) + dmgMiscPlay + buffDmg;
       const mult = parseFloat(ca.dmgMult);
       if (mult) dmgFlat += Math.floor(strM * mult);
       const diceStr = (ca.dice || '') + (dmgFlat ? (dmgFlat > 0 ? '+' : '') + dmgFlat : '');

@@ -900,6 +900,7 @@
       }
       if (!COMBATANTS.includes(comp.type)) return;
       if (!comp.play) comp.play = PF.newCompanionPlay();
+      if (!comp.play.buffs) comp.play.buffs = [];
       const d = PF.companionDerived(c, comp);
       if (!d.abilities) return;
       const cp = comp.play;
@@ -931,12 +932,22 @@
           <button class="small" data-comp-heal="${ci}">Heal</button>
         </div>
         <p style="margin:6px 0 2px">
-          ${[['Init', initMod], ['Fort', sv.fort], ['Ref', sv.ref], ['Will', sv.will]].map(([l, m]) =>
+          ${[['Init', initMod + (d.buffInit || 0)], ['Fort', sv.fort], ['Ref', sv.ref], ['Will', sv.will]].map(([l, m]) =>
             `<button class="small roll-chip" data-roll-label="${esc((comp.name || comp.type) + ': ' + l)}" data-roll-mod="${m}">${l} ${fmt(m)}</button>`).join(' ')}
           ${atkChips}
           <button class="small" data-comp-addatk="${ci}">+ attack</button>
         </p>
-        <div class="small" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <div class="small" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px">
+          <span class="muted">Effects:</span>
+          <button class="small" data-comp-addbuff="${ci}">+ Buff</button>
+          <button class="small" data-comp-addcond="${ci}">+ Condition</button>
+          <button class="small" data-comp-addcustombuff="${ci}">+ Custom</button>
+          ${(cp.buffs || []).map((b, bi) => `<span class="pill ${b.active ? 'gold' : ''}" style="white-space:nowrap"
+              title="${esc(Library.changesText(b.changes) || b.note || '')}">
+            <input type="checkbox" data-comp-buffact="${ci}:${bi}" ${b.active ? 'checked' : ''}> ${esc(b.name)}
+            <a href="#" data-comp-buffdel="${ci}:${bi}">✕</a></span>`).join(' ')}
+        </div>
+        <div class="small" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px">
           <span class="muted">Adjust:</span>
           ${[['atkMisc', 'Atk'], ['dmgMisc', 'Dmg'], ['acMisc', 'AC'], ['saveMisc', 'Saves']].map(([k, l]) =>
             `<label>${l} <input class="tiny" type="number" data-comp-misc="${ci}:${k}" value="${cp[k] || 0}"></label>`).join(' ')}
@@ -1125,6 +1136,35 @@
       const [ci, j] = b.dataset.compDelatk.split(':');
       c.companions[+ci].play.customAttacks.splice(+j, 1);
       save(); render();
+    }));
+    // companion buffs / conditions / spell effects
+    const addCompBuff = (comp, b, scales) => {
+      if (!comp.play.buffs) comp.play.buffs = [];
+      comp.play.buffs.push({ name: b.name, active: true, scales, fromSpell: b.fromSpell,
+                             changes: JSON.parse(JSON.stringify(b.changes || [])), note: b.note || '' });
+      save(); render();
+    };
+    main.querySelectorAll('[data-comp-addbuff]').forEach(b => b.addEventListener('click', () => {
+      const comp = c.companions[+b.dataset.compAddbuff];
+      Library.pickModal('buffs', 'Add Buff / Spell Effect — ' + (comp.name || comp.type),
+        x => addCompBuff(comp, x, x.scales));
+    }));
+    main.querySelectorAll('[data-comp-addcond]').forEach(b => b.addEventListener('click', () => {
+      const comp = c.companions[+b.dataset.compAddcond];
+      Library.pickModal('conditions', 'Add Condition — ' + (comp.name || comp.type), x => addCompBuff(comp, x));
+    }));
+    main.querySelectorAll('[data-comp-addcustombuff]').forEach(b => b.addEventListener('click', () => {
+      const comp = c.companions[+b.dataset.compAddcustombuff];
+      customBuffForm(buff => { if (!comp.play.buffs) comp.play.buffs = []; comp.play.buffs.push(buff); save(); render(); });
+    }));
+    main.querySelectorAll('[data-comp-buffact]').forEach(el => el.addEventListener('change', () => {
+      const [ci, bi] = el.dataset.compBuffact.split(':');
+      c.companions[+ci].play.buffs[+bi].active = el.checked; save(); render();
+    }));
+    main.querySelectorAll('[data-comp-buffdel]').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      const [ci, bi] = a.dataset.compBuffdel.split(':');
+      c.companions[+ci].play.buffs.splice(+bi, 1); save(); render();
     }));
     main.querySelectorAll('[data-opencomp]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
