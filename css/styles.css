@@ -265,14 +265,6 @@ table.data td.num, table.data th.num { text-align: center; }
 #ref-popover table td, #ref-popover table th { border: 1px solid var(--border); padding: 2px 6px; font-size: .85em; }
 #ref-popover table caption { color: var(--accent); padding: 3px; }
 #ref-popover img { display: none; }
-.pdf-mode .ref { border-bottom: none; }
-
-/* PDF capture mode: html2canvas drops nested children of INLINE-level elements
-   that have a background (inline-flex/inline-block alike). Floated blocks render
-   correctly, so the stat bubbles become floats while the sheet is snapshotted. */
-.pdf-mode .stat-big { float: left; display: block !important; text-align: center; }
-.pdf-mode .stat-big .v, .pdf-mode .stat-big .l { display: block; }
-.pdf-mode .sheet-sec { overflow: hidden; } /* contain the floats */
 
 @media print {
   body { background: #fff; }

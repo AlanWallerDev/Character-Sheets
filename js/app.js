@@ -19,7 +19,8 @@
     if (c) c.updated = Date.now();
     let stored = [];
     try { stored = JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (e) { stored = []; }
-    const byId = new Map(stored.map(x => [x.id, x]));
+    if (!Array.isArray(stored)) stored = [];
+    const byId = new Map(stored.filter(x => x && x.id).map(x => [x.id, x]));
     for (const mine of characters) {
       const other = byId.get(mine.id);
       if (!other || (mine.updated || 0) >= (other.updated || 0)) byId.set(mine.id, mine);
@@ -146,6 +147,7 @@
           <div class="nav-item sub ${state.view === 'sheet' ? 'active' : ''}" data-nav="sheet">📜 Character Sheet</div>
         ` : ''}
         <div class="nav-item ${state.view === 'library' ? 'active' : ''}" data-nav="library" style="border-top:1px solid var(--border);margin-top:6px">📚 Rules Library</div>
+        <div class="nav-item ${state.view === 'credits' ? 'active' : ''}" data-nav="credits">⚖ License &amp; Credits</div>
         <div class="spacer"></div>
         <div class="foot">Open Game Content under the OGL v1.0a. Your characters are stored only in this browser.</div>
       </div>
@@ -163,6 +165,7 @@
     try {
       if (state.view === 'roster') renderRoster(main);
       else if (state.view === 'library') Library.render(main, {});
+      else if (state.view === 'credits') renderCredits(main);
       else if (state.view === 'sheet' && c) renderSheet(main, c);
       else if (state.view === 'builder' && c) renderBuilder(main, c);
       else renderRoster(main);
@@ -312,6 +315,46 @@
     grid.querySelectorAll('.char-card').forEach(card => card.addEventListener('click', () => {
       state.charId = card.dataset.id; state.view = 'builder'; state.builderTab = 'profile'; render();
     }));
+  }
+
+  // ---------------- license & credits ----------------
+  function renderCredits(main) {
+    const link = (url, label) => `<a href="${url}" target="_blank" rel="noopener">${esc(label)}</a>`;
+    main.innerHTML = `
+      <h2>License &amp; Credits</h2>
+      <div class="panel">
+        <p><b>Pathfinder 1e Character Vault</b> is a free, fan-made tool. It is not published by,
+        endorsed by, or affiliated with Paizo Inc. All your data stays in your own browser.</p>
+        <p>Pathfinder and associated names are trademarks of Paizo Inc. For more about Paizo and
+        official Pathfinder products, visit ${link('https://paizo.com', 'paizo.com')}.</p>
+      </div>
+      <div class="panel">
+        <h3>Game content</h3>
+        <p>The game rules in this app are Open Game Content, used under the terms of the
+        <b>Open Game License v1.0a</b>. You can read the full license at
+        ${link('https://www.opengamingfoundation.org/ogl.html', 'opengamingfoundation.org')}
+        or on the ${link('https://aonprd.com/OGL.aspx', 'Archives of Nethys')}.</p>
+        <p>Rules data was compiled from these freely available, OGL-licensed community datasets:</p>
+        <ul>
+          <li>${link('https://github.com/devonjones/PSRD-Data', 'PSRD-Data')} — the Pathfinder Reference Document (16 core hardcovers)</li>
+          <li>${link('https://gitlab.com/foundryvtt_pathfinder1e/foundryvtt-pathfinder1', 'FoundryVTT Pathfinder 1e system')} — later hardcover classes, spells and items</li>
+          <li>${link('https://github.com/GammaRBurst/PathfinderUtilities', 'PathfinderUtilities')} — the complete feat corpus</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Software</h3>
+        <ul>
+          <li>PDF export uses ${link('https://github.com/parallax/jsPDF', 'jsPDF')} (MIT License).</li>
+          <li>Built as a static web app — no tracking, no accounts, no server.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Full Open Game License text</h3>
+        <p class="muted">The complete OGL v1.0a (including the Section 15 copyright notices for the
+        content used) is published at the links above. If you'd like it reproduced in full on this
+        page, paste it into the marked area in <code>js/app.js</code> (<code>renderCredits</code>).</p>
+        <!-- OGL-FULL-TEXT: paste the Open Game License v1.0a and Section 15 notices here if desired -->
+      </div>`;
   }
 
   // ---------------- sheet view ----------------

@@ -1,6 +1,5 @@
 /* Native (vector/text) PDF character-sheet export via jsPDF.
-   Produces selectable text, real page breaks (never splits a table row), and
-   controlled margins — replacing the old html2canvas screenshot approach. */
+   Produces selectable text, real page breaks (never splits a table row), and controlled margins. */
 'use strict';
 
 const PDF = (() => {
