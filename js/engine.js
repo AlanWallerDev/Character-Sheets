@@ -83,7 +83,8 @@ const PF = (() => {
       money: { pp: 0, gp: 150, sp: 0, cp: 0 },
       combat: { naturalArmor: 0, deflection: 0, dodge: 0, miscAC: 0, miscArmor: 0, miscInit: 0,
                 miscFort: 0, miscRef: 0, miscWill: 0, miscAttack: 0, miscDamage: 0,
-                miscCMB: 0, miscCMD: 0, hpMisc: 0, speedMisc: 0, srNotes: '', resistNotes: '' },
+                miscCMB: 0, miscCMD: 0, hpMisc: 0, speedMisc: 0,
+                carryStrBonus: 0, carryMult: 1, srNotes: '', resistNotes: '' },
       play: { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, buffs: [], counters: [], rolls: [] },
       skillMiscAll: 0,
       hpMode: 'avg',         // 'avg' | 'roll' | 'max'
@@ -367,15 +368,18 @@ const PF = (() => {
   }
 
   // ---------- carrying ----------
+  // carryStrBonus: effective Str increase for carrying (masterwork backpack +1, muleback cords +8…)
+  // carryMult: flat multiplier on every load limit (Ant Haul ×3, heavy horse, etc.)
   function carryCapacity(c) {
-    let str = abilityScore(c, 'str');
+    let str = abilityScore(c, 'str') + (c.combat.carryStrBonus || 0);
     let mult = 1;
     while (str > 29) { str -= 10; mult *= 4; }
     str = Math.max(str, 0);
+    const m = mult * (c.combat.carryMult || 1);
     return {
-      light: (LIGHT_LOAD[str] || 0) * mult,
-      medium: (MEDIUM_LOAD[str] || 0) * mult,
-      heavy: (HEAVY_LOAD[str] || 0) * mult,
+      light: (LIGHT_LOAD[str] || 0) * m,
+      medium: (MEDIUM_LOAD[str] || 0) * m,
+      heavy: (HEAVY_LOAD[str] || 0) * m,
     };
   }
 
@@ -848,6 +852,9 @@ const PF = (() => {
     cb.speedMisc = (cb.speedMisc || 0) + t('speed');
     cb.miscCMB = (cb.miscCMB || 0) + t('cmb');
     cb.miscCMD = (cb.miscCMD || 0) + t('cmd');
+    cb.carryStrBonus = (cb.carryStrBonus || 0) + t('carryStr');
+    // carry multiplier doesn't add — take the best multiplier among active effects
+    if (buckets['carryMult']) cb.carryMult = Math.max(cb.carryMult || 1, ...buckets['carryMult'].map(ch => ch.value || 1));
     e.skillMiscAll = (e.skillMiscAll || 0) + t('skills');
     return e;
   }

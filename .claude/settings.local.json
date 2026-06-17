@@ -62,7 +62,10 @@
       "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && sed -n '/function classLevels/,/^  }/p' js/engine.js | head -8)",
       "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && node --check js/app.js && echo \"parse OK\" && sed -i 's|js/app.js?v=26|js/app.js?v=27|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)",
       "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && node --check js/app.js && echo \"parse OK\" && sed -i 's|js/app.js?v=27|js/app.js?v=28|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)",
-      "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && node --check js/app.js && echo \"parse OK\" && sed -i 's|js/app.js?v=28|js/app.js?v=29|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)"
+      "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && node --check js/app.js && echo \"parse OK\" && sed -i 's|js/app.js?v=28|js/app.js?v=29|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)",
+      "Bash(node --check js/engine.js)",
+      "Bash(node --check js/library.js)",
+      "Bash(sed -i 's|js/engine.js?v=16|js/engine.js?v=17|; s|js/library.js?v=8|js/library.js?v=9|; s|js/app.js?v=29|js/app.js?v=30|' index.html)"
     ]
   }
 }

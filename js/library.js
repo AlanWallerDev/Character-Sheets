@@ -31,13 +31,15 @@ const Library = (() => {
     attack: 'attack rolls', damage: 'damage', armor: 'armor AC', natural: 'natural armor',
     deflection: 'deflection AC', dodge: 'dodge AC', acMisc: 'AC', fort: 'Fort', ref: 'Ref',
     will: 'Will', saves: 'all saves', skills: 'all skills', init: 'initiative', speed: 'speed',
-    cmb: 'CMB', cmd: 'CMD',
+    cmb: 'CMB', cmd: 'CMD', carryStr: 'carry capacity (Str)', carryMult: '× carry capacity',
   };
 
   function changesText(changes) {
-    return (changes || []).map(ch =>
-      `${ch.value >= 0 ? '+' : ''}${ch.value} ${CHANGE_LABELS[ch.target] || ch.target}` +
-      (ch.type && ch.type !== 'untyped' ? ` (${ch.type})` : '')).join(', ');
+    return (changes || []).map(ch => {
+      if (ch.target === 'carryMult') return `×${ch.value} carry capacity`;
+      return `${ch.value >= 0 ? '+' : ''}${ch.value} ${CHANGE_LABELS[ch.target] || ch.target}` +
+        (ch.type && ch.type !== 'untyped' ? ` (${ch.type})` : '');
+    }).join(', ');
   }
 
   // ---------------- filters per type ----------------

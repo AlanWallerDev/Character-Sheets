@@ -657,6 +657,7 @@
     ['fort', 'Fortitude'], ['ref', 'Reflex'], ['will', 'Will'], ['saves', 'All saves'],
     ['skills', 'All skills'], ['init', 'Initiative'], ['speed', 'Speed (ft)'],
     ['cmb', 'CMB'], ['cmd', 'CMD'],
+    ['carryStr', 'Carrying capacity (+Str)'], ['carryMult', 'Carrying capacity (× multiplier)'],
   ];
   const BUFF_TYPES = ['untyped', 'enhancement', 'morale', 'competence', 'luck', 'sacred',
     'profane', 'insight', 'resistance', 'alchemical', 'circumstance', 'size', 'dodge', 'racial'];
@@ -991,6 +992,14 @@
           </div>
           ${hp.current <= 0 ? `<p class="err"><b>${hp.current <= -PF.abilityScore(c, 'con') ? 'Dead' : hp.current < 0 ? 'Dying' : 'Disabled'}</b></p>` : ''}
           ${p.nonlethal >= hp.current && hp.current > 0 ? '<p class="warn">Unconscious (nonlethal ≥ current HP)</p>' : ''}
+          ${(() => {
+            const carry = PF.carryCapacity(e), load = PF.gearWeight(c);
+            const tier = load > carry.heavy ? '<span class="err">over capacity</span>'
+              : load > carry.medium ? '<span class="err">heavy load</span>'
+              : load > carry.light ? '<span class="warn">medium load</span>' : '<span class="ok">light load</span>';
+            const boosted = (e.combat.carryMult || 1) > (c.combat.carryMult || 1) || (e.combat.carryStrBonus || 0) > (c.combat.carryStrBonus || 0);
+            return `<p class="small" style="margin-top:8px"><b>Carrying:</b> ${load} lbs — Light ${carry.light} / Med ${carry.medium} / Heavy ${carry.heavy} • ${tier}${boosted ? ' <span class="pill gold" style="font-size:.7em">boosted</span>' : ''}</p>`;
+          })()}
 
           <h3 style="margin-top:14px">Buffs & Conditions</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1683,6 +1692,14 @@
         <p>Total weight: <b class="${loadCls}">${load} lbs</b>
           — Light ≤ ${cap.light}, Medium ≤ ${cap.medium}, Heavy ≤ ${cap.heavy}
           • Wealth ≈ <b>${PF.totalGold(c).toFixed(1)} gp</b></p>
+        <p class="small" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+          <span class="muted">Carrying capacity adjustments:</span>
+          <label>+Str <input class="tiny" type="number" id="carry-str" value="${c.combat.carryStrBonus || 0}"
+            title="treat Strength as higher for carrying — masterwork backpack +1, muleback cords +8"></label>
+          <label>× <input class="tiny" type="number" id="carry-mult" min="1" step="0.5" value="${c.combat.carryMult || 1}"
+            title="multiply all load limits — Ant Haul ×3"></label>
+          <span class="muted small">(masterwork backpack +1, muleback cords +8, Ant Haul ×3; temporary effects can also be toggled as buffs on the Play tab)</span>
+        </p>
         <p class="small muted">Check “Equipped” on armor/shields to apply AC, max-Dex and armor check penalties everywhere.</p>
       </div>`;
     const addGear = (entry, kind) => {
@@ -1705,6 +1722,8 @@
     for (const [id, key] of [['m-pp', 'pp'], ['m-gp', 'gp'], ['m-sp', 'sp'], ['m-cp', 'cp']]) {
       bind(id, c, v => c.money[key] = parseInt(v, 10) || 0);
     }
+    bind('carry-str', c, v => { c.combat.carryStrBonus = parseInt(v, 10) || 0; render(); });
+    bind('carry-mult', c, v => { c.combat.carryMult = Math.max(1, parseFloat(v) || 1); render(); });
     main.querySelectorAll('[data-delgear]').forEach(b => b.addEventListener('click', () => {
       c.gear.splice(parseInt(b.dataset.delgear, 10), 1); save(); render();
     }));
