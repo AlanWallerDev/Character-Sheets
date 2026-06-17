@@ -169,6 +169,7 @@
         <div class="nav-item ${state.view === 'library' ? 'active' : ''}" data-nav="library" style="border-top:1px solid var(--border);margin-top:6px">📚 Rules Library</div>
         <div class="nav-item ${state.view === 'credits' ? 'active' : ''}" data-nav="credits">⚖ License &amp; Credits</div>
         <div class="spacer"></div>
+        <a class="coffee-link no-print" href="https://buymeacoffee.com/reddevelopment" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
         <div class="foot">Open Game Content under the OGL v1.0a. Your characters are stored only in this browser.</div>
       </div>
       <div class="main" id="main"></div>`;
