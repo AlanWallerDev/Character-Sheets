@@ -587,9 +587,47 @@
     return entry;
   }
 
+  // full attack: one d20 per iterative attack (mods e.g. [11, 6, 1]), each with
+  // its own to-hit and damage roll, recorded as a single multi-line log entry.
+  function logFullAttack(c, label, mods, dice, bonusDice) {
+    const entry = { label, time: Date.now(), full: true, lines: [] };
+    for (const mod of mods) {
+      const d20 = 1 + Math.floor(Math.random() * 20);
+      const line = { d20, mod, total: d20 + mod };
+      if (dice) {
+        const dmg = PF.rollDice(dice);
+        if (dmg) line.dmg = `${dmg.rolls.join('+')}${dmg.mod ? (dmg.mod > 0 ? '+' : '') + dmg.mod : ''} = ${dmg.total}`;
+      }
+      if (bonusDice) {
+        const extras = [];
+        for (const grp of bonusDice.split(';')) {
+          const m = /(\d*d\d+(?:[+-]\d+)?)\s*(.*)/.exec(grp.trim());
+          if (!m) continue;
+          const r = PF.rollDice(m[1]);
+          if (r) extras.push(`${m[2] ? m[2] + ' ' : ''}${r.total}`);
+        }
+        if (extras.length) line.bonus = extras.join(', ');
+      }
+      entry.lines.push(line);
+    }
+    if (!c.play) c.play = PF.newPlayState();
+    c.play.rolls.unshift(entry);
+    c.play.rolls = c.play.rolls.slice(0, 30);
+    save();
+    return entry;
+  }
+
   function rollChip(label, mod, extra, bonusDice) {
     return `<button class="small roll-chip" data-roll-label="${esc(label)}" data-roll-mod="${mod}"
       ${extra ? `data-roll-dice="${esc(extra)}"` : ''}${bonusDice ? ` data-roll-bonus="${esc(bonusDice)}"` : ''}>${esc(label)} ${fmt(mod)}</button>`;
+  }
+
+  // chip that rolls a whole full attack (all iterative attacks) at once
+  function fullAttackChip(label, mods, dice, bonusDice) {
+    const spread = mods.map(m => fmt(m)).join('/');
+    return `<button class="small roll-chip" data-fullatk="1" data-roll-label="${esc(label)}"
+      data-atk-mods="${mods.join(',')}"${dice ? ` data-roll-dice="${esc(dice)}"` : ''}${bonusDice ? ` data-roll-bonus="${esc(bonusDice)}"` : ''}
+      title="Full attack — rolls every iterative attack">⚔ ${esc(label)} ${spread}</button>`;
   }
 
   // render a custom roll button from a resolved {mod, dice, bonus, noD20} spec
@@ -874,7 +912,14 @@
       const atkMod = t.bab + abM + sizeM + mw.atk + (e.combat.miscAttack || 0);
       const dmgMod = (ranged ? 0 : PF.abilityMod(e, 'str')) + mw.dmg + (e.combat.miscDamage || 0);
       const dice = w && /\d*d\d+/.test(w.dmgM) ? w.dmgM.match(/\d*d\d+/)[0] + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : '') : null;
-      return rollChip(PF.gearDisplayName(g), atkMod, dice, mw.dmgBonus);
+      const single = rollChip(PF.gearDisplayName(g), atkMod, dice, mw.dmgBonus);
+      // once BAB grants iteratives, offer a full-attack chip alongside the single attack
+      const iters = PF.iterAttacks(t.bab);
+      if (iters.length > 1) {
+        const mods = iters.map(b => b + abM + sizeM + mw.atk + (e.combat.miscAttack || 0));
+        return single + ' ' + fullAttackChip(PF.gearDisplayName(g) + ' (full)', mods, dice, mw.dmgBonus);
+      }
+      return single;
     }).join(' ');
 
     // ammunition with quick -/+ to track shots fired (adjusts gear quantity)
@@ -1077,7 +1122,12 @@
           <p><b class="small muted">CUSTOM</b> <button class="small" id="add-custom-roll">+ add</button><br>
             ${(p.customRolls || []).map((cr, i) => customRollChip(cr.label || 'Roll', i, resolveCustomRoll(cr))).join(' ')}</p>
           <div id="roll-log" style="margin-top:8px;max-height:260px;overflow-y:auto;border-top:1px solid var(--border)">
-            ${(p.rolls || []).map(r => r.pure
+            ${(p.rolls || []).map(r => r.full
+              ? `<div class="small" style="padding:3px 0;border-bottom:1px solid #2c251d">
+                  <b>${esc(r.label)}</b>:
+                  ${r.lines.map(l => `<span style="white-space:nowrap">${l === r.lines[0] ? '' : '&nbsp;•&nbsp;'}<span class="${l.d20 === 20 ? 'ok' : l.d20 === 1 ? 'err' : ''}">${l.d20}</span>${l.mod >= 0 ? '+' : ''}${l.mod} = <b style="color:var(--accent)">${l.total}</b>${l.dmg ? ` <span class="muted">(${esc(l.dmg)}${l.bonus ? '; ' + esc(l.bonus) : ''})</span>` : ''}</span>`).join(' ')}
+                </div>`
+              : r.pure
               ? `<div class="small" style="padding:3px 0;border-bottom:1px solid #2c251d">
                   <b>${esc(r.label)}</b>: <b style="color:var(--accent)">${r.total}</b>
                   ${r.breakdown ? `<span class="muted"> • ${esc(r.breakdown)}</span>` : ''}
@@ -1255,8 +1305,13 @@
     const clearBtn = $('#clear-rolls');
     if (clearBtn) clearBtn.addEventListener('click', () => { p.rolls = []; save(); render(); });
     main.querySelectorAll('.roll-chip').forEach(b => b.addEventListener('click', () => {
-      logRoll(c, b.dataset.rollLabel, parseInt(b.dataset.rollMod, 10) || 0,
-        b.dataset.rollDice, b.dataset.rollBonus, b.dataset.rollNod20 === '1');
+      if (b.dataset.fullatk) {
+        const mods = (b.dataset.atkMods || '').split(',').map(n => parseInt(n, 10) || 0);
+        logFullAttack(c, b.dataset.rollLabel, mods, b.dataset.rollDice, b.dataset.rollBonus);
+      } else {
+        logRoll(c, b.dataset.rollLabel, parseInt(b.dataset.rollMod, 10) || 0,
+          b.dataset.rollDice, b.dataset.rollBonus, b.dataset.rollNod20 === '1');
+      }
       render();
     }));
     $('#add-custom-roll').addEventListener('click', () => {
