@@ -554,30 +554,45 @@
   }
 
   // ----- play mode -----
+  // roll a damage expression → { total, parts } where parts is the "3+4+1" (with
+  // any flat modifier) breakdown string; null if the expression doesn't parse.
+  function rollDamage(dice) {
+    const r = PF.rollDice(dice);
+    if (!r) return null;
+    return { total: r.total, parts: `${r.rolls.join('+')}${r.mod ? (r.mod > 0 ? '+' : '') + r.mod : ''}` };
+  }
+  // bonusDice: "1d6 fire;1d6 cold" — elemental/special damage from enchantments.
+  // → [{ dice, label, total }] (callers format to taste).
+  function rollBonusDice(bonusDice) {
+    const out = [];
+    if (!bonusDice) return out;
+    for (const grp of bonusDice.split(';')) {
+      const m = /(\d*d\d+(?:[+-]\d+)?)\s*(.*)/.exec(grp.trim());
+      if (!m) continue;
+      const r = PF.rollDice(m[1]);
+      if (r) out.push({ dice: m[1], label: m[2], total: r.total });
+    }
+    return out;
+  }
+
   function logRoll(c, label, mod, dice, bonusDice, noD20) {
     const entry = { label, time: Date.now() };
     const parts = [];
     if (noD20) {
       // flat dice roll (no d20) — e.g. "Sneak Attack 3d6", "Fireball 8d6"
       entry.pure = true;
-      const r = dice ? PF.rollDice(dice) : null;
+      const r = dice ? rollDamage(dice) : null;
       entry.total = r ? r.total : 0;
-      if (r) entry.breakdown = `${dice} → ${r.rolls.join('+')}${r.mod ? (r.mod > 0 ? '+' : '') + r.mod : ''}`;
+      if (r) entry.breakdown = `${dice} → ${r.parts}`;
     } else {
       const d20 = 1 + Math.floor(Math.random() * 20);
       entry.d20 = d20; entry.mod = mod; entry.total = d20 + mod;
       if (dice) {
-        const dmg = PF.rollDice(dice);
-        if (dmg) parts.push(`${dice} → ${dmg.rolls.join('+')}${dmg.mod ? (dmg.mod > 0 ? '+' : '') + dmg.mod : ''} = ${dmg.total}`);
+        const dmg = rollDamage(dice);
+        if (dmg) parts.push(`${dice} → ${dmg.parts} = ${dmg.total}`);
       }
-      // bonusDice: "1d6 fire;1d6 cold" — elemental/special damage from enchantments
-      if (bonusDice) {
-        for (const grp of bonusDice.split(';')) {
-          const m = /(\d*d\d+(?:[+-]\d+)?)\s*(.*)/.exec(grp.trim());
-          if (!m) continue;
-          const r = PF.rollDice(m[1]);
-          if (r) parts.push(`${m[1]}${m[2] ? ' ' + m[2] : ''} → ${r.total}`);
-        }
+      for (const b of rollBonusDice(bonusDice)) {
+        parts.push(`${b.dice}${b.label ? ' ' + b.label : ''} → ${b.total}`);
       }
       if (parts.length) entry.extra = parts.join(' • ');
     }
@@ -596,19 +611,11 @@
       const d20 = 1 + Math.floor(Math.random() * 20);
       const line = { d20, mod, total: d20 + mod };
       if (dice) {
-        const dmg = PF.rollDice(dice);
-        if (dmg) line.dmg = `${dmg.rolls.join('+')}${dmg.mod ? (dmg.mod > 0 ? '+' : '') + dmg.mod : ''} = ${dmg.total}`;
+        const dmg = rollDamage(dice);
+        if (dmg) line.dmg = `${dmg.parts} = ${dmg.total}`;
       }
-      if (bonusDice) {
-        const extras = [];
-        for (const grp of bonusDice.split(';')) {
-          const m = /(\d*d\d+(?:[+-]\d+)?)\s*(.*)/.exec(grp.trim());
-          if (!m) continue;
-          const r = PF.rollDice(m[1]);
-          if (r) extras.push(`${m[2] ? m[2] + ' ' : ''}${r.total}`);
-        }
-        if (extras.length) line.bonus = extras.join(', ');
-      }
+      const extras = rollBonusDice(bonusDice).map(b => `${b.label ? b.label + ' ' : ''}${b.total}`);
+      if (extras.length) line.bonus = extras.join(', ');
       entry.lines.push(line);
     }
     if (!c.play) c.play = PF.newPlayState();
@@ -913,12 +920,13 @@
       const atkMod = t.bab + abM + sizeM + mw.atk + (e.combat.miscAttack || 0);
       const dmgMod = (ranged ? 0 : PF.abilityMod(e, 'str')) + mw.dmg + (e.combat.miscDamage || 0);
       const dice = w && /\d*d\d+/.test(w.dmgM) ? w.dmgM.match(/\d*d\d+/)[0] + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : '') : null;
-      const single = rollChip(PF.gearDisplayName(g), atkMod, dice, mw.dmgBonus);
+      const name = PF.gearDisplayName(g);
+      const single = rollChip(name, atkMod, dice, mw.dmgBonus);
       // once BAB grants iteratives, offer a full-attack chip alongside the single attack
       const iters = PF.iterAttacks(t.bab);
       if (iters.length > 1) {
         const mods = iters.map(b => b + abM + sizeM + mw.atk + (e.combat.miscAttack || 0));
-        return single + ' ' + fullAttackChip(PF.gearDisplayName(g) + ' (full)', mods, dice, mw.dmgBonus);
+        return single + ' ' + fullAttackChip(name + ' (full)', mods, dice, mw.dmgBonus);
       }
       return single;
     }).join(' ');

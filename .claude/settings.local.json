@@ -65,7 +65,11 @@
       "Bash(cd \"/c/Users/zanca/Desktop/dnd characters/Character Sheets\" && node --check js/app.js && echo \"parse OK\" && sed -i 's|js/app.js?v=28|js/app.js?v=29|' index.html && grep -oE 'js/app\\\\.js\\\\?v=[0-9]+' index.html)",
       "Bash(node --check js/engine.js)",
       "Bash(node --check js/library.js)",
-      "Bash(sed -i 's|js/engine.js?v=16|js/engine.js?v=17|; s|js/library.js?v=8|js/library.js?v=9|; s|js/app.js?v=29|js/app.js?v=30|' index.html)"
+      "Bash(sed -i 's|js/engine.js?v=16|js/engine.js?v=17|; s|js/library.js?v=8|js/library.js?v=9|; s|js/app.js?v=29|js/app.js?v=30|' index.html)",
+      "Bash(git --no-pager diff HEAD --stat)",
+      "Bash(git --no-pager diff HEAD)",
+      "Bash(git --no-pager log --oneline -8)",
+      "Bash(git --no-pager diff 3b025c6~1 HEAD -- js/app.js js/engine.js css/styles.css)"
     ]
   }
 }
