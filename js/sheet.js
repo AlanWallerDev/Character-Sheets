@@ -128,13 +128,25 @@ const Sheet = (() => {
       }).join(' ') + '</p>';
     }
     if (c.traits.length) {
-      h += `<h3>Traits</h3><p>` + c.traits.map(tn => `<span class="pill">${ref('traits', tn)}</span>`).join(' ') + '</p>';
+      const findTrait = tn => (PFDATA.traits || []).find(x => x.name === tn);
+      const traitCat = {};
+      c.traits.forEach(tn => { const tr = findTrait(tn); if (tr && tr.category) traitCat[tr.category] = (traitCat[tr.category] || 0) + 1; });
+      h += `<h3>Traits</h3><p>` + c.traits.map(tn => {
+        const tr = findTrait(tn);
+        const dup = tr && tr.category && traitCat[tr.category] > 1;
+        return `<span class="pill${dup ? ' pill-unmet' : ''}"${dup ? ` title="More than one ${esc(tr.category)} trait — only one per category is allowed"` : ''}>${dup ? '⚠ ' : ''}${ref('traits', tn)}</span>`;
+      }).join(' ') + '</p>';
     }
     if (race) {
-      h += `<h3>Racial Traits</h3><p>` + (race.traits || []).map(rt =>
-        `<span class="pill">${ref('racetrait', rt.name, rt.name, race.name)}</span>`).join(' ');
-      if (c.altTraits.length) h += ' ' + c.altTraits.map(a => `<span class="pill gold">${ref('racialTraits', a)} (alt)</span>`).join(' ');
+      // standard traits with the ones replaced by chosen alternates removed
+      const rtData = PF.racialTraits(c);
+      h += `<h3>Racial Traits</h3><p>`;
+      h += rtData.standard.filter(s => !s.replaced).map(s =>
+        `<span class="pill">${ref('racetrait', s.name, s.name, race.name)}</span>`).join(' ');
+      if (rtData.alternates.length) h += ' ' + rtData.alternates.map(a =>
+        `<span class="pill gold">${ref('racialTraits', a.name)} <span class="muted small">(alt${a.complex ? ', modifies traits' : ''})</span></span>`).join(' ');
       h += '</p>';
+      if (rtData.unmatched.length) h += `<p class="small muted">Alternate racial trait not recognized: ${rtData.unmatched.map(esc).join(', ')}</p>`;
     }
     if (c.languages) h += `<p><b>Languages:</b> ${esc(c.languages)}</p>`;
 

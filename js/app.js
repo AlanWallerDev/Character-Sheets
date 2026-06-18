@@ -1470,8 +1470,12 @@
             <p><b>Ability modifiers:</b> ${Object.entries(race.mods).map(([k, v]) => fmt(v) + ' ' + k.toUpperCase()).join(', ') || (race.flex ? `+${race.flex} any` : '—')}</p>
             <p class="small muted">${esc(race.languages)}</p>
             <h4>Alternate racial traits</h4>
-            <div>${c.altTraits.map(a => `<span class="pill gold">${esc(a)} <a href="#" data-deltrait="${esc(a)}">✕</a></span>`).join(' ') || '<span class="muted small">none selected</span>'}</div>
+            <div>${c.altTraits.map(a => `<span class="pill gold"><span class="ref" data-rt="racialTraits" data-rn="${esc(a)}">${esc(a)}</span> <a href="#" data-deltrait="${esc(a)}" style="text-decoration:none">✕</a></span>`).join(' ') || '<span class="muted small">none selected</span>'}</div>
             <button class="small" id="add-alt" style="margin-top:6px">+ Add alternate trait</button>
+            ${(() => { const rt = PF.racialTraits(c); return `
+              <h4 style="margin-top:12px">Standard racial traits${c.altTraits.length ? ' (alternates applied)' : ''}</h4>
+              <div>${rt.standard.map(s => `<span class="pill"${s.replaced ? ' style="opacity:.5;text-decoration:line-through" title="replaced by an alternate racial trait"' : ''}><span class="ref" data-rt="racetrait" data-rn="${esc(s.name)}" data-rx="${esc(race.name)}">${esc(s.name)}</span></span>`).join(' ') || '<span class="muted small">none</span>'}</div>
+              ${rt.unmatched.length ? `<p class="small warn">Alternate racial trait not recognized: ${rt.unmatched.map(esc).join(', ')} — check spelling against the Library.</p>` : ''}`; })()}
           ` : '<p class="muted">Pick a race to see its details. All races from the Core Rulebook, ARG and Bestiaries are available.</p>'}
         </div>
         <div class="panel" style="flex:2" id="race-detail">
@@ -1490,6 +1494,7 @@
       c.altTraits = c.altTraits.filter(x => x !== a.dataset.deltrait);
       save(); render();
     }));
+    attachRefPopovers(main, c);
   }
   function singularRace(name) { return name; }
 
@@ -1708,6 +1713,10 @@
   function tabFeats(main, c) {
     const lvl = c.levels.length;
     const baseFeats = Math.max(0, Math.ceil(lvl / 2));
+    // standard rule: at most one trait per category. Count categories to flag dupes.
+    const traitCat = {};
+    c.traits.forEach(tn => { const tr = PFDATA.traits.find(x => x.name === tn); if (tr && tr.category) traitCat[tr.category] = (traitCat[tr.category] || 0) + 1; });
+    const dupCats = Object.keys(traitCat).filter(k => traitCat[k] > 1);
     main.innerHTML = `<h2>Feats & Traits</h2>${statBar(c)}
       <div class="row">
         <div class="panel">
@@ -1731,10 +1740,13 @@
         <div class="panel">
           <h3>Traits <span class="small muted">(standard: 2, from different categories)</span></h3>
           <button class="primary small" id="add-trait">+ Add Trait</button>
+          ${dupCats.length ? `<p class="small err" style="margin:8px 0 0">⚠ More than one trait from the same category (${esc(dupCats.join(', '))}). The standard rules allow only one trait per category.</p>` : ''}
           <table class="data" style="margin-top:8px">
             ${c.traits.map((tn, i) => {
               const tr = PFDATA.traits.find(x => x.name === tn);
-              return `<tr><td><b>${esc(tn)}</b>${tr ? `<div class="small muted">${esc(tr.category)}</div>` : ''}</td>
+              const dup = tr && tr.category && traitCat[tr.category] > 1;
+              return `<tr><td><b>${esc(tn)}</b>${dup ? ` <span class="err" title="More than one ${esc(tr.category)} trait — only one trait per category is allowed">⚠</span>` : ''}
+                ${tr ? `<div class="small ${dup ? 'err' : 'muted'}">${esc(tr.category)}</div>` : ''}</td>
                 <td><button class="small danger" data-deltr="${i}">✕</button></td></tr>`;
             }).join('') || '<tr><td class="muted">No traits yet.</td></tr>'}
           </table>

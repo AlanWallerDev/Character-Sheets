@@ -168,6 +168,20 @@ const PF = (() => {
   }
   const featTargets = clause => clause.split(/,| and /i).map(normFeat).filter(Boolean);
 
+  // Parse "replaces X"/"in place of X" clauses from plain text → {replaces, complex}.
+  // Only a SINGLE clause is trusted (the standard "This … replaces X." pattern);
+  // multiple clauses or an implausibly broad one (aggregate oaths/hexes, etc.)
+  // mark the block "complex" so callers leave the base list intact. Shared by
+  // archetypes and alternate racial traits.
+  function replaceClauses(text) {
+    const matches = text.match(/\b(?:replaces?|in place of)\s+[^.]+/gi) || [];
+    let replaces = [], complex = false;
+    if (matches.length === 1) replaces = featTargets(matches[0].replace(/^.*?(?:replaces?|in place of)\s+/i, ''));
+    else if (matches.length > 1) complex = true;
+    if (replaces.length > 4) { replaces = []; complex = true; }
+    return { replaces, complex };
+  }
+
   // Parse an archetype's HTML into its features and which base features each one
   // replaces or alters. Memoized on the archetype object.
   function parseArchetype(arch) {
@@ -181,19 +195,13 @@ const PF = (() => {
       if (!name) continue;
       const descHtml = m[2];
       const text = stripTags(descHtml);
-      // Only trust a replacement when the block has exactly ONE "replaces …"
-      // clause — that's the standard "This ability replaces X." pattern.
-      // Aggregate blocks (oaths, hexes, etc.) carry many such phrases across
-      // their optional sub-features; auto-stripping from those is unreliable, so
-      // we mark them "complex" and leave the base feature list intact.
-      const repMatches = text.match(/\b(?:replaces?|in place of)\s+[^.]+/gi) || [];
+      // replaces: shared single-clause logic (see replaceClauses); alters is
+      // archetype-specific and can also flag the block complex.
+      const { replaces, complex: repComplex } = replaceClauses(text);
       const altMatches = text.match(/\b(?:alters?|modif(?:y|ies))\s+[^.]+/gi) || [];
-      let replaces = [], alters = [], complex = false;
-      if (repMatches.length === 1) replaces = featTargets(repMatches[0].replace(/^.*?(?:replaces?|in place of)\s+/i, ''));
-      else if (repMatches.length > 1) complex = true;
+      let alters = [], complex = repComplex;
       if (altMatches.length === 1) alters = featTargets(altMatches[0].replace(/^.*?(?:alters?|modif(?:y|ies))\s+/i, ''));
       else if (altMatches.length > 1) complex = true;
-      if (replaces.length > 4) { replaces = []; complex = true; }  // safety: implausibly broad clause
       // skip advisory "The following rage powers complement…" sections — these
       // list complementary options, they don't grant or change a feature.
       if (!replaces.length && !alters.length && !complex && /^the following\b/i.test(text)) continue;
@@ -290,6 +298,38 @@ const PF = (() => {
     const feats = parseArchetype(arch).features;
     const f = feats.find(x => normFeat(x.name) === t) || feats.find(x => featMatch(normFeat(x.name), t));
     return f ? f.html : null;
+  }
+
+  // ---------- alternate racial traits ----------
+  // Parallel to archetypes: an alternate racial trait replaces one or more of a
+  // race's standard traits (declared in its HTML, "This racial trait replaces X").
+  const getRacialTrait = (name, raceName) => (PFDATA.racialTraits || []).find(a =>
+    a.name.toLowerCase() === String(name || '').trim().toLowerCase() &&
+    (!raceName || a.race.toLowerCase() === raceName.toLowerCase()));
+
+  function parseAltTrait(rt) {
+    if (!rt || !rt.html) return { replaces: [], complex: false };
+    if (rt.__rep) return rt.__rep;
+    rt.__rep = replaceClauses(stripTags(rt.html));
+    return rt.__rep;
+  }
+
+  // Merged racial traits: standard traits with the ones replaced by the
+  // character's chosen alternates flagged, plus the alternates themselves.
+  // Returns { race, standard:[{name, body, replaced}], alternates:[{name, complex}], unmatched:[] }.
+  function racialTraits(c) {
+    const race = getRace(c.race);
+    if (!race) return null;
+    const standard = (race.traits || []).map(t => ({ name: t.name, body: t.body, norm: normFeat(t.name), replaced: false }));
+    const alternates = [], unmatched = [];
+    for (const an of (c.altTraits || [])) {
+      const rt = getRacialTrait(an, race.name) || getRacialTrait(an);
+      if (!rt) { unmatched.push(an); continue; }
+      const { replaces, complex } = parseAltTrait(rt);
+      for (const tgt of replaces) for (const s of standard) if (!s.replaced && featMatch(s.norm, tgt)) s.replaced = true;
+      alternates.push({ name: rt.name, complex });
+    }
+    return { race: race.name, standard, alternates, unmatched };
   }
 
   function totals(c) {
@@ -1291,6 +1331,7 @@ const PF = (() => {
     mod, newCharacter, racialMods, abilityScore, abilityMod, pointBuyCost,
     classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat,
     classFeatures, parseArchetype, getArchetype, classFeatureHTML, archetypeFeatureHTML,
+    racialTraits, getRacialTrait,
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
