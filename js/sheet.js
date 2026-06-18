@@ -107,7 +107,7 @@ const Sheet = (() => {
         h += '<p>' + grp.features.map(f => {
           const isArch = f.source !== 'class';
           const disp = f.name.charAt(0).toUpperCase() + f.name.slice(1);
-          const label = ref(isArch ? 'archetypes' : 'classes', isArch ? f.source : grp.clsName, disp);
+          const label = ref(isArch ? 'archfeat' : 'classfeat', f.name, disp, isArch ? f.source : grp.clsName);
           const lvls = `<span class="muted small"> (Lv ${f.levels.join(', ')})</span>`;
           const alt = f.alteredBy.length ? `<span class="muted small"> — altered by ${esc(f.alteredBy.join(', '))}</span>`
             : (f.complex ? `<span class="muted small"> — modifies class features (see description)</span>` : '');

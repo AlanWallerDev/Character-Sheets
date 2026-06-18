@@ -256,6 +256,42 @@ const PF = (() => {
     return out;
   }
 
+  // Pull the specific "<hN>Feature</hN> + description" block out of a class or
+  // archetype's HTML, for per-feature hover popovers. Heading level varies
+  // (classes use <h4> for features, archetypes <h3>), so match any level and
+  // capture until the next heading of equal-or-higher rank. Returns null if not
+  // found. Matching is specificity-ordered so "Rage power" picks "Rage Powers"
+  // (heading contains target) over "Rage" (target contains heading).
+  function extractFeatureBlock(html, featureName) {
+    if (!html) return null;
+    const target = normFeat(featureName);
+    if (!target) return null;
+    const heads = [];
+    const re = /<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi;
+    let m;
+    while ((m = re.exec(html))) heads.push({ level: +m[1], text: normFeat(m[2]), start: m.index });
+    let idx = heads.findIndex(h => h.text === target);
+    if (idx < 0) idx = heads.findIndex(h => h.text && h.text.includes(target));
+    if (idx < 0) idx = heads.findIndex(h => h.text && target.includes(h.text));
+    if (idx < 0) return null;
+    const lvl = heads[idx].level;
+    let end = html.length;
+    for (let j = idx + 1; j < heads.length; j++) if (heads[j].level <= lvl) { end = heads[j].start; break; }
+    return html.slice(heads[idx].start, end);
+  }
+  function classFeatureHTML(clsName, featureName) {
+    const cls = getClass(clsName);
+    return cls ? extractFeatureBlock(cls.html, featureName) : null;
+  }
+  function archetypeFeatureHTML(archName, featureName, clsName) {
+    const arch = getArchetype(archName, clsName) || getArchetype(archName);
+    if (!arch) return null;
+    const t = normFeat(featureName);
+    const feats = parseArchetype(arch).features;
+    const f = feats.find(x => normFeat(x.name) === t) || feats.find(x => featMatch(normFeat(x.name), t));
+    return f ? f.html : null;
+  }
+
   function totals(c) {
     let bab = 0, fort = 0, ref = 0, will = 0;
     for (const [cls, lvl] of classLevels(c)) {
@@ -1254,7 +1290,7 @@ const PF = (() => {
     ABILITIES, ABILITY_NAMES, CASTERS, POINT_BUY_COST, SIZE_MOD,
     mod, newCharacter, racialMods, abilityScore, abilityMod, pointBuyCost,
     classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat,
-    classFeatures, parseArchetype, getArchetype,
+    classFeatures, parseArchetype, getArchetype, classFeatureHTML, archetypeFeatureHTML,
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,

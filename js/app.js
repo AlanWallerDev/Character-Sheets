@@ -454,6 +454,20 @@
         if (!rt) return null;
         return `<h2>${esc(rt.name)}</h2><p class="tag">${esc(race.name)} racial trait — ${esc(race.source)}</p><p>${esc(rt.body)}</p>`;
       }
+      case 'classfeat': {
+        // extra = class name; show the specific feature block, else the class
+        const fh = PF.classFeatureHTML(extra, name);
+        if (fh) return `<p class="tag">${esc(extra)} class feature</p>${fh}`;
+        const cls = PF.getClass(extra);
+        return cls ? Library.detailHTML('classes', cls) : null;
+      }
+      case 'archfeat': {
+        // extra = archetype name; show the specific feature block, else the archetype
+        const fh = PF.archetypeFeatureHTML(extra, name);
+        if (fh) return `<p class="tag">${esc(extra)} archetype feature</p>${fh}`;
+        const arch = (PFDATA.archetypes || []).find(a => a.name.toLowerCase() === String(extra).toLowerCase());
+        return arch ? Library.detailHTML('archetypes', arch) : null;
+      }
     }
     if (!entry) return null;
     let html = Library.detailHTML(type, entry);
@@ -1515,11 +1529,11 @@
                   <option value="skill" ${l.fcb === 'skill' ? 'selected' : ''}>+1 Skill</option>
                   <option value="other" ${l.fcb === 'other' ? 'selected' : ''}>Other</option>
                 </select></label>
-                <input style="flex:1" placeholder="archetype(s), notes…" data-arch="${i}" value="${esc((l.archetypes || []).join(', '))}">
+                <span style="flex:1"></span>
                 <button class="small danger" data-dellvl="${i}">✕</button>
               </div>`).join('') || '<p class="muted">No levels yet — add your first class level above.</p>'}
           </div>
-          <p class="small muted" style="margin-top:8px">FCB = favored class bonus. Type archetype names freely, or browse them in the panel on the right / the Library.</p>
+          <p class="small muted" style="margin-top:8px">FCB = favored class bonus. Choose archetypes per class in the panel on the right.</p>
         </div>
         <div class="panel" style="flex:2" id="cls-detail">
           ${renderClassSummary(c)}
@@ -1544,11 +1558,20 @@
     main.querySelectorAll('[data-fcb]').forEach(el => el.addEventListener('change', () => {
       c.levels[parseInt(el.dataset.fcb, 10)].fcb = el.value; save(); render();
     }));
-    main.querySelectorAll('[data-arch]').forEach(el => el.addEventListener('change', () => {
-      c.levels[parseInt(el.dataset.arch, 10)].archetypes =
-        el.value.split(',').map(s => s.trim()).filter(Boolean);
-      save();
+    main.querySelectorAll('[data-addarch]').forEach(b => b.addEventListener('click', () => {
+      const cls = b.dataset.addarch;
+      Library.pickModal('archetypes', 'Archetype — ' + cls, a => {
+        const cur = classArchetypes(c, cls);
+        if (!cur.includes(a.name)) { cur.push(a.name); setClassArchetypes(c, cls, cur); save(); render(); }
+      }, { acls: cls });
     }));
+    main.querySelectorAll('[data-delarch]').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      const cls = a.dataset.archCls;
+      setClassArchetypes(c, cls, classArchetypes(c, cls).filter(x => x !== a.dataset.delarch));
+      save(); render();
+    }));
+    attachRefPopovers(main, c);
   }
 
   function renderClassSummary(c) {
@@ -1566,10 +1589,15 @@
         ? grp.features.map(f => {
             const isArch = f.source !== 'class';
             const disp = f.name.charAt(0).toUpperCase() + f.name.slice(1);
-            const alt = f.alteredBy.length ? ` <span class="muted">(altered)</span>` : (f.complex ? ` <span class="muted">(modifies)</span>` : '');
-            return `<span class="pill${isArch ? ' gold' : ''}" title="${isArch ? 'from ' + esc(f.source) : esc(clsName)}${f.alteredBy.length ? ' — altered by ' + esc(f.alteredBy.join(', ')) : (f.complex ? ' — modifies several class features; see description' : '')}">${esc(disp)} <span class="muted">${f.levels.join(',')}</span>${alt}</span>`;
+            const note = f.alteredBy.length ? ` <span class="muted">(altered by ${esc(f.alteredBy.join(', '))})</span>` : (f.complex ? ` <span class="muted">(modifies)</span>` : '');
+            const rt = isArch ? 'archfeat' : 'classfeat', rx = isArch ? f.source : clsName;
+            return `<span class="pill${isArch ? ' gold' : ''}"><span class="ref" data-rt="${rt}" data-rn="${esc(f.name)}" data-rx="${esc(rx)}">${esc(disp)}</span> <span class="muted">${f.levels.join(',')}</span>${note}</span>`;
           }).join(' ')
         : '';
+      const archs = classArchetypes(c, clsName);
+      const archHtml = `<p class="small" style="margin-top:8px"><b>Archetypes:</b>
+        ${archs.length ? archs.map(a => `<span class="pill gold"><span class="ref" data-rt="archetypes" data-rn="${esc(a)}">${esc(a)}</span> <a href="#" data-delarch="${esc(a)}" data-arch-cls="${esc(clsName)}" title="remove" style="text-decoration:none">✕</a></span>`).join(' ') : '<span class="muted">none</span>'}
+        <button class="small" data-addarch="${esc(clsName)}">+ Archetype</button></p>`;
       h += `<h3>${esc(clsName)} ${lvl}</h3>
         <p class="small muted">${esc(cls.desc || '')}</p>
         <p class="small"><b>HD</b> ${esc(cls.hd)} • <b>Skill ranks</b> ${cls.ranks != null ? cls.ranks + ' + Int' : '?'} •
@@ -1581,16 +1609,20 @@
           ${cls.prog.map(p => `<tr ${p.level === lvl ? 'style="background:rgba(201,162,39,.12)"' : ''}>
             <td>${p.level}</td><td>${esc(p.bab)}</td><td>${p.fort}</td><td>${p.ref}</td><td>${p.will}</td>
             <td>${esc(p.special || '')}</td></tr>`).join('')}</table></details>` : ''}
-        ${archetypeLinks(clsName)}`;
+        ${archHtml}`;
     }
     return h;
   }
 
-  function archetypeLinks(clsName) {
-    const archs = PFDATA.archetypes.filter(a => a.class.toLowerCase() === clsName.toLowerCase());
-    if (!archs.length) return '';
-    return `<p class="small"><b>${archs.length} archetypes available</b> — view in
-      <a href="#" data-lib-arch="${esc(clsName)}">Library</a></p>`;
+  function classArchetypes(c, clsName) {
+    const set = new Set();
+    for (const l of c.levels) if (l.cls === clsName && Array.isArray(l.archetypes)) l.archetypes.forEach(a => a && set.add(a));
+    return [...set];
+  }
+  // archetypes apply to the whole class — store the chosen set on every level of
+  // that class so deleting one level can't orphan them; reads union across levels.
+  function setClassArchetypes(c, clsName, arr) {
+    for (const l of c.levels) if (l.cls === clsName) l.archetypes = arr.slice();
   }
 
   // ----- skills -----
