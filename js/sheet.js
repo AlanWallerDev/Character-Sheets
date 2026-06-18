@@ -96,6 +96,29 @@ const Sheet = (() => {
       h += `</table><div class="small muted">Armor check penalty: ${acp}</div>`;
     }
 
+    // class features (base "Special" column with archetype replacements applied)
+    const cf = PF.classFeatures(c);
+    if (cf.some(g => g.features.length || g.unmatchedArch.length)) {
+      h += `<h3>Class Features</h3>`;
+      const multi = cf.length > 1;
+      for (const grp of cf) {
+        if (!grp.features.length && !grp.unmatchedArch.length) continue;
+        if (multi) h += `<p class="small" style="margin:.5em 0 .2em"><b>${ref('classes', grp.clsName)} ${grp.lvl}</b></p>`;
+        h += '<p>' + grp.features.map(f => {
+          const isArch = f.source !== 'class';
+          const disp = f.name.charAt(0).toUpperCase() + f.name.slice(1);
+          const label = ref(isArch ? 'archetypes' : 'classes', isArch ? f.source : grp.clsName, disp);
+          const lvls = `<span class="muted small"> (Lv ${f.levels.join(', ')})</span>`;
+          const alt = f.alteredBy.length ? `<span class="muted small"> — altered by ${esc(f.alteredBy.join(', '))}</span>`
+            : (f.complex ? `<span class="muted small"> — modifies class features (see description)</span>` : '');
+          return `<span class="pill${isArch ? ' gold' : ''}">${label}${lvls}${alt}</span>`;
+        }).join(' ') + '</p>';
+        if (grp.unmatchedArch.length) {
+          h += `<p class="small muted">Archetype not recognized (typed as a note): ${grp.unmatchedArch.map(esc).join(', ')}</p>`;
+        }
+      }
+    }
+
     // feats & traits
     if (c.feats.length) {
       h += `<h3>Feats</h3><p>` + c.feats.map(f => {

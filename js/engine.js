@@ -136,6 +136,126 @@ const PF = (() => {
     return m ? parseInt(m[1], 10) : 0;
   }
 
+  // ---------- class features & archetypes ----------
+  const getArchetype = (name, clsName) => (PFDATA.archetypes || []).find(a =>
+    a.name.toLowerCase() === String(name || '').trim().toLowerCase() &&
+    (!clsName || a.class.toLowerCase() === clsName.toLowerCase()));
+
+  const ORDINALS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7,
+    eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14,
+    fifteenth: 15, sixteenth: 16, seventeenth: 17, eighteenth: 18, nineteenth: 19, twentieth: 20 };
+
+  // Normalize a feature name so the class "Special" column and an archetype's
+  // "replaces X" clause can be matched: lowercase, drop parentheticals, bonus
+  // numbers, ordinals and filler words.
+  function normFeat(s) {
+    return stripTags(s).toLowerCase()
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\bsee text\b/g, ' ')
+      .replace(/[+-]?\d+(?:st|nd|rd|th)?/g, ' ')
+      .replace(/\b(the|a|an|her|his|their|its|class|feature|features|ability|abilities|gained|at|level|levels)\b/g, ' ')
+      .replace(/[^a-z ]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+  const featMatch = (a, b) => !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+
+  function levelFromText(txt) {
+    let m = /\bat\s+(\d+)(?:st|nd|rd|th)?\s+level/i.exec(txt);
+    if (m) return parseInt(m[1], 10);
+    m = /\bat\s+([a-z]+)\s+level/i.exec(txt);
+    if (m && ORDINALS[m[1].toLowerCase()]) return ORDINALS[m[1].toLowerCase()];
+    return 1;
+  }
+  const featTargets = clause => clause.split(/,| and /i).map(normFeat).filter(Boolean);
+
+  // Parse an archetype's HTML into its features and which base features each one
+  // replaces or alters. Memoized on the archetype object.
+  function parseArchetype(arch) {
+    if (!arch || !arch.html) return { features: [] };
+    if (arch.__feat) return arch.__feat;
+    const features = [];
+    const re = /<h3[^>]*>([\s\S]*?)<\/h3>([\s\S]*?)(?=<h3|$)/gi;
+    let m;
+    while ((m = re.exec(arch.html))) {
+      const name = stripTags(m[1]);
+      if (!name) continue;
+      const descHtml = m[2];
+      const text = stripTags(descHtml);
+      // Only trust a replacement when the block has exactly ONE "replaces …"
+      // clause — that's the standard "This ability replaces X." pattern.
+      // Aggregate blocks (oaths, hexes, etc.) carry many such phrases across
+      // their optional sub-features; auto-stripping from those is unreliable, so
+      // we mark them "complex" and leave the base feature list intact.
+      const repMatches = text.match(/\b(?:replaces?|in place of)\s+[^.]+/gi) || [];
+      const altMatches = text.match(/\b(?:alters?|modif(?:y|ies))\s+[^.]+/gi) || [];
+      let replaces = [], alters = [], complex = false;
+      if (repMatches.length === 1) replaces = featTargets(repMatches[0].replace(/^.*?(?:replaces?|in place of)\s+/i, ''));
+      else if (repMatches.length > 1) complex = true;
+      if (altMatches.length === 1) alters = featTargets(altMatches[0].replace(/^.*?(?:alters?|modif(?:y|ies))\s+/i, ''));
+      else if (altMatches.length > 1) complex = true;
+      if (replaces.length > 4) { replaces = []; complex = true; }  // safety: implausibly broad clause
+      // skip advisory "The following rage powers complement…" sections — these
+      // list complementary options, they don't grant or change a feature.
+      if (!replaces.length && !alters.length && !complex && /^the following\b/i.test(text)) continue;
+      features.push({ name, level: levelFromText(text), replaces, alters, complex, html: '<h3>' + m[1] + '</h3>' + descHtml });
+    }
+    arch.__feat = { features };
+    return arch.__feat;
+  }
+
+  function uniqArchetypeNames(c, clsName) {
+    const set = new Set();
+    for (const l of c.levels) if (l.cls === clsName && Array.isArray(l.archetypes)) {
+      l.archetypes.forEach(a => { if (a) set.add(a); });
+    }
+    return [...set];
+  }
+
+  // Per-class merged feature list (base "Special" column with archetype
+  // replacements/alterations applied), grouped by feature name. Returns
+  // [{clsName, lvl, features:[{name, source, levels:[], html, alteredBy:[]}], unmatchedArch:[]}].
+  function classFeatures(c) {
+    const out = [];
+    for (const [clsName, lvl] of classLevels(c)) {
+      const cls = getClass(clsName);
+      const base = [];
+      if (cls && cls.prog) {
+        for (const row of cls.prog) {
+          if (row.level > lvl) break;
+          if (!row.special) continue;
+          for (const raw of row.special.split(',')) {
+            const nm = raw.trim();
+            if (nm) base.push({ name: nm, level: row.level, norm: normFeat(nm), source: 'class', replaced: false, alteredBy: [] });
+          }
+        }
+      }
+      const added = [], unmatchedArch = [];
+      for (const an of uniqArchetypeNames(c, clsName)) {
+        const arch = getArchetype(an, clsName) || getArchetype(an);
+        if (!arch) { unmatchedArch.push(an); continue; }
+        for (const f of parseArchetype(arch).features) {
+          for (const tgt of f.replaces) for (const b of base) if (!b.replaced && featMatch(b.norm, tgt)) b.replaced = true;
+          for (const tgt of f.alters) for (const b of base) if (featMatch(b.norm, tgt) && !b.alteredBy.includes(arch.name)) b.alteredBy.push(arch.name);
+          if (f.level <= lvl) added.push({ name: f.name, level: f.level, source: arch.name, html: f.html, alteredBy: [], complex: !!f.complex });
+        }
+      }
+      // group by source + name, collecting the levels each is gained at
+      const grouped = new Map();
+      for (const f of base.filter(b => !b.replaced).concat(added)) {
+        const key = f.source + '|' + f.name.toLowerCase();
+        let g = grouped.get(key);
+        if (!g) { g = { name: f.name, source: f.source, levels: [], html: f.html || null, alteredBy: [], complex: false }; grouped.set(key, g); }
+        g.levels.push(f.level);
+        if (f.complex) g.complex = true;
+        for (const ab of (f.alteredBy || [])) if (!g.alteredBy.includes(ab)) g.alteredBy.push(ab);
+      }
+      const features = [...grouped.values()]
+        .sort((a, b) => Math.min(...a.levels) - Math.min(...b.levels) || (a.source === 'class' ? -1 : 1));
+      out.push({ clsName, lvl, features, unmatchedArch });
+    }
+    return out;
+  }
+
   function totals(c) {
     let bab = 0, fort = 0, ref = 0, will = 0;
     for (const [cls, lvl] of classLevels(c)) {
@@ -1134,6 +1254,7 @@ const PF = (() => {
     ABILITIES, ABILITY_NAMES, CASTERS, POINT_BUY_COST, SIZE_MOD,
     mod, newCharacter, racialMods, abilityScore, abilityMod, pointBuyCost,
     classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat,
+    classFeatures, parseArchetype, getArchetype,
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,

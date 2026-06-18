@@ -1554,16 +1554,28 @@
   function renderClassSummary(c) {
     const entries = [...PF.classLevels(c)];
     if (!entries.length) return '<p class="muted">Class details appear here.</p>';
+    const featByClass = {};
+    PF.classFeatures(c).forEach(g => { featByClass[g.clsName] = g; });
     let h = '';
     for (const [clsName, lvl] of entries) {
       const cls = PF.getClass(clsName);
       if (!cls) continue;
       const row = PF.progRow(clsName, lvl);
+      const grp = featByClass[clsName];
+      const featHtml = grp && grp.features.length
+        ? grp.features.map(f => {
+            const isArch = f.source !== 'class';
+            const disp = f.name.charAt(0).toUpperCase() + f.name.slice(1);
+            const alt = f.alteredBy.length ? ` <span class="muted">(altered)</span>` : (f.complex ? ` <span class="muted">(modifies)</span>` : '');
+            return `<span class="pill${isArch ? ' gold' : ''}" title="${isArch ? 'from ' + esc(f.source) : esc(clsName)}${f.alteredBy.length ? ' — altered by ' + esc(f.alteredBy.join(', ')) : (f.complex ? ' — modifies several class features; see description' : '')}">${esc(disp)} <span class="muted">${f.levels.join(',')}</span>${alt}</span>`;
+          }).join(' ')
+        : '';
       h += `<h3>${esc(clsName)} ${lvl}</h3>
         <p class="small muted">${esc(cls.desc || '')}</p>
         <p class="small"><b>HD</b> ${esc(cls.hd)} • <b>Skill ranks</b> ${cls.ranks != null ? cls.ranks + ' + Int' : '?'} •
         ${row ? `<b>BAB</b> ${esc(row.bab)} • <b>F/R/W</b> +${row.fort}/+${row.ref}/+${row.will}` : ''}</p>
-        ${row && row.special ? `<p class="small"><b>Current features:</b> ${esc(row.special)}</p>` : ''}
+        ${featHtml ? `<p class="small"><b>Features${grp.features.some(f => f.source !== 'class') ? ' (archetypes applied)' : ''}:</b></p><p>${featHtml}</p>` : ''}
+        ${grp && grp.unmatchedArch.length ? `<p class="small warn">Archetype not recognized: ${grp.unmatchedArch.map(esc).join(', ')} — check spelling against the Library.</p>` : ''}
         ${cls.prog ? `<details><summary class="small" style="cursor:pointer;color:var(--accent)">Full progression & features</summary>
           <table class="data small"><tr><th>Lv</th><th>BAB</th><th>F</th><th>R</th><th>W</th><th>Special</th></tr>
           ${cls.prog.map(p => `<tr ${p.level === lvl ? 'style="background:rgba(201,162,39,.12)"' : ''}>
