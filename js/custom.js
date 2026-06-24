@@ -72,7 +72,7 @@ const Custom = (() => {
       fields: [
         { k: 'name', label: 'Name', req: 1 },
         { k: 'category', label: 'Category', kind: 'select',
-          options: ['Combat', 'Faith', 'Magic', 'Social', 'Regional', 'Religion', 'Race', 'Campaign', 'Other'] },
+          options: ['Combat', 'Faith', 'Magic', 'Social', 'Regional', 'Religion', 'Race', 'Campaign', 'Drawback', 'Other'] },
         { k: 'desc', label: 'Description', kind: 'textarea', req: 1 },
       ],
       post: f => ({ category: f.category, html: para(f.desc) }),
@@ -94,6 +94,17 @@ const Custom = (() => {
         { k: 'desc', label: 'Features / rules text', kind: 'textarea', req: 1 },
       ],
       post: f => ({ class: f.class, html: para(f.desc) }),
+    },
+    classAbilities: {
+      label: 'Class Ability',
+      fields: [
+        { k: 'name', label: 'Name', req: 1, ph: 'Greater Smashing' },
+        { k: 'classesText', label: 'Class(es), comma-separated', req: 1, ph: 'Barbarian, Skald' },
+        { k: 'kind', label: 'Type', kind: 'select',
+          options: [['', '—'], ['Ex', 'Extraordinary (Ex)'], ['Su', 'Supernatural (Su)'], ['Sp', 'Spell-like (Sp)']] },
+        { k: 'desc', label: 'Description', kind: 'textarea', req: 1 },
+      ],
+      post: f => ({ classes: splitList(f.classesText), kind: f.kind || '', html: para(f.desc) }),
     },
     weapons: {
       label: 'Weapon',

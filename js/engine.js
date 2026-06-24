@@ -302,6 +302,36 @@ const PF = (() => {
     return f ? f.html : null;
   }
 
+  // Limited-use resources worth a Play-tab tracker: the character's chosen class
+  // abilities and class features whose text reads as a daily/rounds/pool resource
+  // (Rage rounds, Bardic Performance, Ki pool, Channel Energy, Lay on Hands…).
+  const LIMITED_RE = /per day|\/day|\bpool\b|\bki\b/i;
+  const RES_SKIP = /^(orisons?|cantrips?|knacks?)$/;  // at-will 0-level spells, not limited
+  function limitedResources(c) {
+    const out = [], seen = new Set();
+    const add = raw => {
+      // collapse tiered names ("Smite evil 1/day" / "2/day") to one base resource
+      const name = raw.replace(/\s*\d+\s*\/\s*(?:day|rage|rounds?|rd)\b.*$/i, '').trim() || raw;
+      const k = name.toLowerCase();
+      if (name && !RES_SKIP.test(normFeat(name)) && !seen.has(k)) { seen.add(k); out.push({ name }); }
+    };
+    // scan only the lead text of each entry — aggregate blocks (e.g. "Rage
+    // Powers") embed long sub-lists whose "per day" phrases aren't the feature's
+    // own resource.
+    const lead = html => stripTags(html).slice(0, 360);
+    for (const a of (c.classAbilities || [])) {
+      const ab = getClassAbility(a.name);
+      if (ab && ab.html && LIMITED_RE.test(lead(ab.html))) add(a.name);
+    }
+    for (const grp of classFeatures(c)) {
+      for (const f of grp.features) {
+        const html = f.source === 'class' ? classFeatureHTML(grp.clsName, f.name) : archetypeFeatureHTML(f.source, f.name);
+        if (html && LIMITED_RE.test(lead(html))) add(f.name);
+      }
+    }
+    return out;
+  }
+
   // ---------- alternate racial traits ----------
   // Parallel to archetypes: an alternate racial trait replaces one or more of a
   // race's standard traits (declared in its HTML, "This racial trait replaces X").
@@ -1344,7 +1374,7 @@ const PF = (() => {
     mod, newCharacter, racialMods, abilityScore, abilityMod, pointBuyCost,
     classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat,
     classFeatures, parseArchetype, getArchetype, classFeatureHTML, archetypeFeatureHTML,
-    racialTraits, getRacialTrait,
+    racialTraits, getRacialTrait, limitedResources,
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,

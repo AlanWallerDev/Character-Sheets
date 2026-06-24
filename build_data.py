@@ -866,14 +866,17 @@ def extract_traits(books):
         if not bk:
             continue
         for r in bk.rows:
-            if r['type'] != 'trait':
+            if r['type'] not in ('trait', 'drawback'):
                 continue
-            cat = ''
-            for a in bk.ancestors(r['section_id']):
-                nm = a.get('name') or ''
-                if re.search(r'Traits?$', nm) and nm.lower() not in ('character traits', 'traits'):
-                    cat = re.sub(r'\s*Traits?$', '', nm)
-                    break
+            if r['type'] == 'drawback':
+                cat = 'Drawback'
+            else:
+                cat = ''
+                for a in bk.ancestors(r['section_id']):
+                    nm = a.get('name') or ''
+                    if re.search(r'Traits?$', nm) and nm.lower() not in ('character traits', 'traits'):
+                        cat = re.sub(r'\s*Traits?$', '', nm)
+                        break
             k = r['name'].lower()
             if k in seen:
                 continue

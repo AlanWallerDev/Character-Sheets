@@ -183,6 +183,12 @@ const Sheet = (() => {
         if (anyOff) h += `<p class="small muted">† not on the ${esc(clsName)} spell list</p>`;
       }
     }
+    // spell-like abilities / spells not tied to a casting class
+    const otherSpells = c.spells.filter(s => !s.cls);
+    if (otherSpells.length) {
+      h += `<h3>Spell-Like Abilities &amp; Other Spells</h3><p>` + otherSpells.map(s =>
+        `${ref('spells', s.name)}${s.note ? ` <span class="muted small">(${esc(s.note)})</span>` : ''}`).join(', ') + '</p>';
+    }
 
     // gear
     if (c.gear.length) {

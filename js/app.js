@@ -1082,7 +1082,7 @@
         <span class="stat-big"><span class="v">${PF.speed(e)}</span><span class="l">Speed</span></span>
         ${buffed ? '<span class="pill gold" title="active buffs/conditions are applied to these numbers">⚡ live</span>' : ''}
         <span style="flex:1"></span>
-        <button id="rest-btn" title="Restores spell slots, removes nonlethal damage, heals character level in HP">🌙 Rest</button>
+        <button id="rest-btn" title="Restores spell slots, refills capped trackers, removes nonlethal damage, heals character level in HP">🌙 Rest</button>
       </div>
 
       <div class="row">
@@ -1130,10 +1130,16 @@
 
           <h3 style="margin-top:14px">Trackers <span class="small muted">(charges, ammo, rage rounds…)</span></h3>
           <button class="small" id="add-counter">+ Tracker</button>
+          ${(() => {
+            const tracked = new Set((p.counters || []).map(k => (k.name || '').toLowerCase()));
+            const limited = PF.limitedResources(c).filter(r => !tracked.has(r.name.toLowerCase()));
+            return limited.length ? `<div class="small" style="margin-top:6px"><span class="muted">Track a class resource: </span>${
+              limited.map(r => { const d = r.name.charAt(0).toUpperCase() + r.name.slice(1); return `<button class="small roll-chip" data-addres="${esc(d)}">+ ${esc(d)}</button>`; }).join(' ')}</div>` : '';
+          })()}
           ${(p.counters || []).map((k, i) => `<div style="margin-top:4px;display:flex;gap:6px;align-items:center">
             <input style="width:150px" data-cntname="${i}" value="${esc(k.name)}">
             <button class="small" data-cntmod="${i}:-1">−</button>
-            <b>${k.cur}</b>${k.max ? ' / ' + k.max : ''}
+            <b>${k.cur}</b> <span class="muted">/</span> <input class="tiny" type="number" min="0" data-cntmax="${i}" value="${k.max || 0}" title="maximum (0 = no cap)">
             <button class="small" data-cntmod="${i}:1">+</button>
             <button class="small danger" data-cntdel="${i}">✕</button>
           </div>`).join('')}
@@ -1193,6 +1199,7 @@
     bind('hp-nl', c, v => { c.play.nonlethal = parseInt(v, 10) || 0; render(); });
     $('#rest-btn').addEventListener('click', () => adj(() => {
       p.slotsUsed = {};
+      for (const k of (p.counters || [])) if (k.max) k.cur = k.max;  // daily resources refresh
       p.nonlethal = 0;
       p.hpDamage = Math.max(0, (p.hpDamage || 0) - c.levels.length);
       for (const comp of c.companions || []) {
@@ -1328,6 +1335,16 @@
     }));
     main.querySelectorAll('[data-cntname]').forEach(el => el.addEventListener('change', () => {
       p.counters[+el.dataset.cntname].name = el.value; save();
+    }));
+    main.querySelectorAll('[data-cntmax]').forEach(el => el.addEventListener('change', () => {
+      const k = p.counters[+el.dataset.cntmax];
+      const m = Math.max(0, parseInt(el.value, 10) || 0);
+      if (k.cur === 0 || k.cur > m) k.cur = m;  // fill a freshly-added tracker / clamp overflow
+      k.max = m; save(); render();
+    }));
+    main.querySelectorAll('[data-addres]').forEach(b => b.addEventListener('click', () => {
+      p.counters.push({ name: b.dataset.addres, cur: 0, max: 0 });
+      save(); render();
     }));
     const clearBtn = $('#clear-rolls');
     if (clearBtn) clearBtn.addEventListener('click', () => { p.rolls = []; save(); render(); });
@@ -1800,12 +1817,11 @@
   // ----- spells -----
   function tabSpells(main, c) {
     const casters = [...PF.classLevels(c)].filter(([k]) => PF.casterInfo(k));
-    if (!casters.length) {
-      main.innerHTML = `<h2>Spells</h2>${statBar(c)}
-        <div class="panel"><p class="muted">No spellcasting classes. Add levels in a casting class (Wizard, Cleric, Sorcerer, Oracle, Magus…) to manage spells.</p></div>`;
-      return;
-    }
     let h = `<h2>Spells</h2>${statBar(c)}`;
+    if (!casters.length) {
+      h += `<div class="panel no-print"><p class="muted">No spellcasting classes. You can still record individual spells or
+        spell-like abilities granted by a feat, item, racial trait, etc. in the section below.</p></div>`;
+    }
     for (const [clsName, lvl] of casters) {
       const info = PF.casterInfo(clsName);
       const slots = PF.spellSlots(c, clsName);
@@ -1846,7 +1862,32 @@
       }
       h += '</div>';
     }
+    // spells / spell-like abilities not tied to a casting class (cls === '')
+    const others = c.spells.filter(s => !s.cls);
+    h += `<div class="panel">
+      <h3>Spell-Like Abilities &amp; Other Spells <span class="small muted">— from feats, items, racial traits, domains…</span></h3>
+      <button class="primary small" id="add-other-spell">+ Add Spell / SLA</button>
+      ${others.length ? `<table class="data small" style="margin-top:8px">
+        ${others.map(s => {
+          const sp = PF.getSpell(s.name); const gi = c.spells.indexOf(s);
+          return `<tr><td style="width:26%"><b>${esc(s.name)}</b>${sp && sp.levelText ? ` <span class="muted small">(${esc(sp.levelText)})</span>` : ''}</td>
+            <td class="small muted">${sp ? esc(sp.school + ' — ' + (sp.desc || '').slice(0, 80)) : ''}</td>
+            <td style="width:170px"><input class="small" style="width:160px" placeholder="source / uses (e.g. 1/day, Ring of X)" data-othernote="${gi}" value="${esc(s.note || '')}"></td>
+            <td><button class="small danger" data-delspell="${gi}">✕</button></td></tr>`;
+        }).join('')}
+      </table>` : '<p class="small muted" style="margin-top:6px">None yet.</p>'}
+    </div>`;
     main.innerHTML = h;
+    const addOther = $('#add-other-spell');
+    if (addOther) addOther.addEventListener('click', () =>
+      Library.pickModal('spells', 'Add Spell / Spell-Like Ability', sp => {
+        const lvls = Object.values(sp.levels || {}).map(Number).filter(n => !isNaN(n));
+        c.spells.push({ name: sp.name, cls: '', lvl: lvls.length ? Math.min(...lvls) : 0, prepared: 0, note: '' });
+        save(); render();
+      }));
+    main.querySelectorAll('[data-othernote]').forEach(el => el.addEventListener('change', () => {
+      c.spells[parseInt(el.dataset.othernote, 10)].note = el.value; save();
+    }));
     main.querySelectorAll('[data-addspell]').forEach(b => b.addEventListener('click', () => {
       const clsName = b.dataset.addspell;
       const info = PF.casterInfo(clsName);
