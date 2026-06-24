@@ -96,15 +96,19 @@ const Sheet = (() => {
       h += `</table><div class="small muted">Armor check penalty: ${acp}</div>`;
     }
 
-    // class features (base "Special" column with archetype replacements applied)
+    // class features (base "Special" column with archetype replacements applied),
+    // plus the character's chosen class abilities (rage powers, hexes, bloodlines…)
     const cf = PF.classFeatures(c);
-    if (cf.some(g => g.features.length || g.unmatchedArch.length)) {
+    const abilByClass = {};
+    for (const a of (c.classAbilities || [])) (abilByClass[a.cls] = abilByClass[a.cls] || []).push(a.name);
+    if (cf.some(g => g.features.length || g.unmatchedArch.length) || Object.keys(abilByClass).length) {
       h += `<h3>Class Features</h3>`;
       const multi = cf.length > 1;
       for (const grp of cf) {
-        if (!grp.features.length && !grp.unmatchedArch.length) continue;
+        const abils = abilByClass[grp.clsName] || [];
+        if (!grp.features.length && !grp.unmatchedArch.length && !abils.length) continue;
         if (multi) h += `<p class="small" style="margin:.5em 0 .2em"><b>${ref('classes', grp.clsName)} ${grp.lvl}</b></p>`;
-        h += '<p>' + grp.features.map(f => {
+        if (grp.features.length) h += '<p>' + grp.features.map(f => {
           const isArch = f.source !== 'class';
           const disp = f.name.charAt(0).toUpperCase() + f.name.slice(1);
           const label = ref(isArch ? 'archfeat' : 'classfeat', f.name, disp, isArch ? f.source : grp.clsName);
@@ -113,6 +117,8 @@ const Sheet = (() => {
             : (f.complex ? `<span class="muted small"> — modifies class features (see description)</span>` : '');
           return `<span class="pill${isArch ? ' gold' : ''}">${label}${lvls}${alt}</span>`;
         }).join(' ') + '</p>';
+        if (abils.length) h += `<p><span class="muted small">Abilities: </span>` +
+          abils.map(n => `<span class="pill gold">${ref('classAbility', n, n)}</span>`).join(' ') + '</p>';
         if (grp.unmatchedArch.length) {
           h += `<p class="small muted">Archetype not recognized (typed as a note): ${grp.unmatchedArch.map(esc).join(', ')}</p>`;
         }

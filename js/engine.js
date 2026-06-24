@@ -48,6 +48,7 @@ const PF = (() => {
   // ---------- lookups ----------
   const byName = (arr, name) => arr.find(x => x.name === name);
   const getClass = n => byName(PFDATA.classes, n);
+  const getClassAbility = n => byName(PFDATA.classAbilities || [], n);
   const getRace = n => byName(PFDATA.races, n);
   const getFeat = n => byName(PFDATA.feats, n);
   const getSpell = n => byName(PFDATA.spells, n);
@@ -76,6 +77,7 @@ const PF = (() => {
       classSkillExtra: [],   // skills marked as class skills (traits, homebrew)
       feats: [],             // [{name, note}]
       traits: [],            // [names]
+      classAbilities: [],    // [{name, cls}] chosen rage powers / bloodlines / hexes / etc.
       languages: '',
       spells: [],            // [{name, cls, lvl, prepared}]
       gear: [],              // [{name, kind, qty, equipped, cost, weight, note}]
@@ -1348,7 +1350,7 @@ const PF = (() => {
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
     carryCapacity, gearWeight, casterInfo, spellOnClassList, bonusSlots, spellSlots, spellsKnownRow, spellDC,
     totalGold, num,
-    getClass, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
+    getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
     getCompSpecies, getFamiliarSpecies,
     CONDITIONS, newPlayState, stackTotal, effective, currentHP, rollDice,

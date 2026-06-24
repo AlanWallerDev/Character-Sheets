@@ -468,6 +468,10 @@
         const arch = (PFDATA.archetypes || []).find(a => a.name.toLowerCase() === String(extra).toLowerCase());
         return arch ? Library.detailHTML('archetypes', arch) : null;
       }
+      case 'classAbility': {
+        const ab = PF.getClassAbility(name) || (PFDATA.classAbilities || []).find(a => a.name.toLowerCase() === String(name).toLowerCase());
+        return ab ? Library.detailHTML('classAbilities', ab) : null;
+      }
     }
     if (!entry) return null;
     let html = Library.detailHTML(type, entry);
@@ -1576,6 +1580,22 @@
       setClassArchetypes(c, cls, classArchetypes(c, cls).filter(x => x !== a.dataset.delarch));
       save(); render();
     }));
+    main.querySelectorAll('[data-addability]').forEach(b => b.addEventListener('click', () => {
+      const cls = b.dataset.addability;
+      Library.pickModal('classAbilities', 'Class Ability — ' + cls, a => {
+        if (!Array.isArray(c.classAbilities)) c.classAbilities = [];
+        if (!c.classAbilities.some(x => x.name === a.name && x.cls === cls)) {
+          c.classAbilities.push({ name: a.name, cls });
+          save(); render();
+        }
+      }, { cacls: cls });
+    }));
+    main.querySelectorAll('[data-delability]').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      const cls = a.dataset.abilityCls, name = a.dataset.delability;
+      c.classAbilities = (c.classAbilities || []).filter(x => !(x.name === name && x.cls === cls));
+      save(); render();
+    }));
     attachRefPopovers(main, c);
   }
 
@@ -1603,6 +1623,10 @@
       const archHtml = `<p class="small" style="margin-top:8px"><b>Archetypes:</b>
         ${archs.length ? archs.map(a => `<span class="pill gold"><span class="ref" data-rt="archetypes" data-rn="${esc(a)}">${esc(a)}</span> <a href="#" data-delarch="${esc(a)}" data-arch-cls="${esc(clsName)}" title="remove" style="text-decoration:none">✕</a></span>`).join(' ') : '<span class="muted">none</span>'}
         <button class="small" data-addarch="${esc(clsName)}">+ Archetype</button></p>`;
+      const abils = classAbilitiesFor(c, clsName);
+      const abilHtml = `<p class="small" style="margin-top:6px"><b>Abilities</b> <span class="muted">(rage powers, hexes, bloodlines…)</span>:
+        ${abils.length ? abils.map(a => `<span class="pill gold"><span class="ref" data-rt="classAbility" data-rn="${esc(a)}">${esc(a)}</span> <a href="#" data-delability="${esc(a)}" data-ability-cls="${esc(clsName)}" title="remove" style="text-decoration:none">✕</a></span>`).join(' ') : '<span class="muted">none</span>'}
+        <button class="small" data-addability="${esc(clsName)}">+ Ability</button></p>`;
       h += `<h3>${esc(clsName)} ${lvl}</h3>
         <p class="small muted">${esc(cls.desc || '')}</p>
         <p class="small"><b>HD</b> ${esc(cls.hd)} • <b>Skill ranks</b> ${cls.ranks != null ? cls.ranks + ' + Int' : '?'} •
@@ -1614,9 +1638,14 @@
           ${cls.prog.map(p => `<tr ${p.level === lvl ? 'style="background:rgba(201,162,39,.12)"' : ''}>
             <td>${p.level}</td><td>${esc(p.bab)}</td><td>${p.fort}</td><td>${p.ref}</td><td>${p.will}</td>
             <td>${esc(p.special || '')}</td></tr>`).join('')}</table></details>` : ''}
-        ${archHtml}`;
+        ${archHtml}
+        ${abilHtml}`;
     }
     return h;
+  }
+
+  function classAbilitiesFor(c, clsName) {
+    return (c.classAbilities || []).filter(a => a.cls === clsName).map(a => a.name);
   }
 
   function classArchetypes(c, clsName) {
