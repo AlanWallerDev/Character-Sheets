@@ -162,11 +162,19 @@ const Sheet = (() => {
       const known = c.spells.filter(s => s.cls === clsName);
       if (known.length) {
         const byLvl = {};
+        let anyOff = false;
         for (const s of known) (byLvl[s.lvl] = byLvl[s.lvl] || []).push(s);
         for (const lvl of Object.keys(byLvl).sort((a, b) => a - b)) {
-          h += `<p><b>Level ${lvl}:</b> ` + byLvl[lvl].map(s =>
-            `${ref('spells', s.name)}${s.prepared ? ' <span class="muted small">(×' + s.prepared + ')</span>' : ''}`).join(', ') + '</p>';
+          h += `<p><b>Level ${lvl}:</b> ` + byLvl[lvl].map(s => {
+            const off = !PF.spellOnClassList(s.name, clsName);
+            if (off) anyOff = true;
+            const nm = off
+              ? `<span class="offlist" title="Not on the ${esc(clsName)} spell list">${ref('spells', s.name)} †</span>`
+              : ref('spells', s.name);
+            return `${nm}${s.prepared ? ' <span class="muted small">(×' + s.prepared + ')</span>' : ''}`;
+          }).join(', ') + '</p>';
         }
+        if (anyOff) h += `<p class="small muted">† not on the ${esc(clsName)} spell list</p>`;
       }
     }
 

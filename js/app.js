@@ -1822,8 +1822,20 @@
       const clsName = b.dataset.addspell;
       const info = PF.casterInfo(clsName);
       Library.pickModal('spells', `Add ${clsName} Spell`, (sp, st) => {
-        const lvlForClass = sp.levels[info.list] != null ? sp.levels[info.list] :
-          (sp.levels[clsName] != null ? sp.levels[clsName] : (st.slvl !== '' && st.slvl != null ? parseInt(st.slvl, 10) : 0));
+        const lv = sp.levels || {};
+        let lvlForClass;
+        if (lv[info.list] != null) lvlForClass = lv[info.list];
+        else if (lv[clsName] != null) lvlForClass = lv[clsName];
+        else {
+          // off-list spell (the user deliberately browsed another list) — don't
+          // dump it into cantrips. Use the list they filtered by, else the spell's
+          // lowest level anywhere, else a chosen level filter, and only then 0.
+          // It's flagged as off-list on the sheet rather than blocked here.
+          const otherLvls = Object.values(lv).map(Number).filter(n => !isNaN(n));
+          lvlForClass = (st && st.cls && lv[st.cls] != null) ? lv[st.cls]
+            : otherLvls.length ? Math.min(...otherLvls)
+            : (st && st.slvl !== '' && st.slvl != null) ? parseInt(st.slvl, 10) : 0;
+        }
         c.spells.push({ name: sp.name, cls: clsName, lvl: lvlForClass, prepared: 0 });
         save(); render();
       }, { cls: info.list });

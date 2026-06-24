@@ -607,6 +607,17 @@ const PF = (() => {
     return null;
   }
 
+  // Is this spell actually on the given class's spell list? Used to flag spells
+  // the user deliberately added from another class's list. Unknown spells
+  // (homebrew / not in data) are treated as on-list to avoid false flags.
+  function spellOnClassList(spellName, clsName) {
+    const sp = getSpell(spellName);
+    if (!sp || !sp.levels) return true;
+    const info = casterInfo(clsName);
+    const listKey = info ? info.list : clsName;
+    return sp.levels[listKey] != null || sp.levels[clsName] != null;
+  }
+
   function bonusSlots(abilityModValue, spellLevel) {
     if (spellLevel < 1 || abilityModValue < spellLevel) return 0;
     return Math.floor((abilityModValue - spellLevel) / 4) + 1;
@@ -1335,7 +1346,7 @@ const PF = (() => {
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
-    carryCapacity, gearWeight, casterInfo, bonusSlots, spellSlots, spellsKnownRow, spellDC,
+    carryCapacity, gearWeight, casterInfo, spellOnClassList, bonusSlots, spellSlots, spellsKnownRow, spellDC,
     totalGold, num,
     getClass, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,

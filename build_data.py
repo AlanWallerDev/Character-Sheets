@@ -1123,6 +1123,16 @@ def src_from_desc(html, fallback=COMPENDIUM_SRC):
     return m.group(1).strip() if m else fallback
 
 
+def clean_foundry_html(html):
+    # Foundry inline document links: "@Compendium[id]{Label}" / "@UUID[id]{Label}"
+    # → just "Label"; drop any unlabeled leftovers.
+    if not html:
+        return html
+    html = re.sub(r'@\w+\[[^\]]*\]\{([^}]*)\}', r'\1', html)
+    html = re.sub(r'@\w+\[[^\]]*\]', '', html)
+    return html
+
+
 def foundry_spell_levels(learned):
     NORM = {'sorcerer/wizard': ['Sorcerer', 'Wizard'], 'cleric/oracle': ['Cleric', 'Oracle'],
             'unchained summoner': ['Summoner (Unchained)'], 'summoner (unchained)': ['Summoner (Unchained)']}
@@ -1139,13 +1149,24 @@ def foundry_spell_levels(learned):
 
 
 def extract_foundry_spells(existing):
+    # `existing` maps lower-case name -> already-built spell dict (from PSRD). For
+    # spells PSRD already has, we still MERGE the Foundry class-list assignments
+    # (learnedAt) so occult classes / the Unchained Summoner / etc. pick up the
+    # core spells on their lists; PSRD's own levels win on conflict (setdefault).
     out = []
     for d in load_nedb('spells'):
         name = d.get('name', '').strip()
-        if not name or name.lower() in existing:
+        if not name:
             continue
         s = d.get('system', {})
-        html = s.get('shortDescription') or ''
+        flv = foundry_spell_levels(s.get('learnedAt'))
+        key = name.lower()
+        if key in existing:
+            lv = existing[key]['levels']
+            for cls, lvl in flv.items():
+                lv.setdefault(cls, lvl)
+            continue
+        html = clean_foundry_html(s.get('shortDescription') or '')
         if not html:
             continue
         acts = s.get('actions') or [{}]
@@ -1162,14 +1183,13 @@ def extract_foundry_spells(existing):
         actv = act.get('activation') or {}
         cast = ('%s %s action' % (actv.get('cost') or 1, actv.get('type') or 'standard')) \
             if actv.get('type') in ('standard', 'swift', 'move', 'full') else (actv.get('type') or '')
-        existing.add(name.lower())
-        out.append({
+        spell = {
             'name': name,
             'source': COMPENDIUM_SRC,
             'school': FSCHOOLS.get(s.get('school'), s.get('school') or ''),
             'sub': s.get('subschool') or None,
             'descriptor': s.get('types') or None,
-            'levels': foundry_spell_levels(s.get('learnedAt')),
+            'levels': flv,
             'levelText': '',
             'cast': cast,
             'comp': ', '.join(comps),
@@ -1178,6 +1198,37 @@ def extract_foundry_spells(existing):
             'save': (act.get('save') or {}).get('description') or '',
             'sr': '',
             'desc': strip_html(html)[:140],
+            'html': html,
+        }
+        existing[key] = spell
+        out.append(spell)
+    return out
+
+
+def extract_foundry_classfeatures():
+    # Selectable class sub-features (rage powers, bloodlines, hexes, arcana,
+    # discoveries, revelations, talents, etc.) from the pf1 class-abilities pack.
+    out, seen = [], set()
+    for d in load_nedb('class-abilities'):
+        name = d.get('name', '').strip()
+        if not name or name.lower() in seen:
+            continue
+        s = d.get('system', {})
+        desc = s.get('description') or {}
+        html = clean_foundry_html(desc.get('value') if isinstance(desc, dict) else '')
+        if not html:
+            continue
+        classes = []
+        for a in (s.get('associations') or {}).get('classes') or []:
+            nm = a[0] if isinstance(a, list) and a else (a if isinstance(a, str) else None)
+            if nm and nm not in classes:
+                classes.append(nm)
+        seen.add(name.lower())
+        out.append({
+            'name': name,
+            'classes': classes,
+            'kind': {'su': 'Su', 'ex': 'Ex', 'sp': 'Sp'}.get(s.get('abilityType'), ''),
+            'source': COMPENDIUM_SRC,
             'html': html,
         })
     return out
@@ -1623,7 +1674,22 @@ def main():
     write_js('feats.js', 'feats', feats)
 
     spells = extract_spells(books)
-    spells += extract_foundry_spells({s['name'].lower() for s in spells})
+    spells += extract_foundry_spells({s['name'].lower(): s for s in spells})
+    # The source spell-list data never tags the Shaman's orisons (0-level spells),
+    # even though the class grants them — so a Shaman ends up with no cantrips to
+    # pick. Tag the canonical Shaman orison list at level 0.
+    SHAMAN_ORISONS = {'bleed', 'create water', 'detect magic', 'detect poison', 'guidance',
+                      'light', 'mending', 'purify food and drink', 'read magic', 'resistance',
+                      'spark', 'stabilize'}
+    for sp in spells:
+        if sp['name'].lower() in SHAMAN_ORISONS:
+            sp['levels'].setdefault('Shaman', 0)
+    # Same gap for the Unchained Summoner: levels 1-6 are present but its 0-level
+    # cantrips are missing. They match the chained Summoner's 0-level list, so
+    # mirror those (data-derived rather than hand-listed).
+    for sp in spells:
+        if sp['levels'].get('Summoner') == 0:
+            sp['levels'].setdefault('Summoner (Unchained)', 0)
     write_js('spells.js', 'spells', spells)
 
     weapons = extract_weapon_tables(books)
@@ -1645,6 +1711,7 @@ def main():
     write_js('traits.js', 'traits', extract_traits(books))
     write_js('skills.js', 'skills', extract_skills(books))
     write_js('companions.js', 'companions', extract_companions(books))
+    write_js('classabilities.js', 'classAbilities', extract_foundry_classfeatures())
     write_js('buffs.js', 'buffs', extract_foundry_buffs())
     print('Done.')
 

@@ -203,6 +203,8 @@ table.data td.num, table.data th.num { text-align: center; }
 .sheet .stat-big .l { color: #7a6a50; }
 .sheet .pill { background: #ece1c8; border-color: #b9a888; color: #4a3a25; }
 .sheet .pill.gold { border-color: #b0732f; color: #7a3c0d; font-weight: bold; } /* archetype features */
+.offlist { color: var(--accent2-bright); }                                    /* spell not on the class list */
+.sheet .offlist { background: #f3ddc4; color: #8a3c1a; padding: 0 4px; border-radius: 3px; }
 .sheet hr { border: none; border-top: 1px solid #b9a888; }
 .sheet .muted { color: #7a6a50; }
 .sheet-sec { margin-bottom: 14px; }

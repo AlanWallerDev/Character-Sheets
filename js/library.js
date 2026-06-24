@@ -12,6 +12,7 @@ const Library = (() => {
     races: { label: 'Races', data: () => PFDATA.races },
     classes: { label: 'Classes', data: () => PFDATA.classes },
     archetypes: { label: 'Archetypes', data: () => PFDATA.archetypes },
+    classAbilities: { label: 'Class Abilities (rage powers, hexes…)', data: () => PFDATA.classAbilities || [] },
     feats: { label: 'Feats', data: () => PFDATA.feats },
     spells: { label: 'Spells', data: () => PFDATA.spells },
     traits: { label: 'Character Traits', data: () => PFDATA.traits },
@@ -76,6 +77,8 @@ const Library = (() => {
       out.push(sel('cat', 'Category', uniq(PFDATA.items.map(i => i.category))));
     } else if (type === 'archetypes') {
       out.push(sel('acls', 'Class', uniq(PFDATA.archetypes.map(a => a.class))));
+    } else if (type === 'classAbilities') {
+      out.push(sel('cacls', 'Class', uniq((PFDATA.classAbilities || []).flatMap(a => a.classes || []))));
     } else if (type === 'traits') {
       out.push(sel('tcat', 'Category', uniq(PFDATA.traits.map(t => t.category))));
     } else if (type === 'racialTraits') {
@@ -115,6 +118,7 @@ const Library = (() => {
       }
       if (type === 'items' && state.cat && x.category !== state.cat) return false;
       if (type === 'archetypes' && state.acls && x.class !== state.acls) return false;
+      if (type === 'classAbilities' && state.cacls && !(x.classes || []).includes(state.cacls)) return false;
       if (type === 'traits' && state.tcat && x.category !== state.tcat) return false;
       if (type === 'racialTraits' && state.race && x.race !== state.race) return false;
       if (type === 'weapons' && state.prof && x.prof !== state.prof) return false;
@@ -130,6 +134,7 @@ const Library = (() => {
       case 'spells': return esc(x.school) + ' ' + esc(x.levelText || Object.entries(x.levels).map(([c, l]) => c + ' ' + l).join(', ')).slice(0, 70);
       case 'items': return [x.category, x.price].filter(Boolean).join(' — ');
       case 'archetypes': return x.class + ' — ' + x.source;
+      case 'classAbilities': return (x.classes || []).join(', ') + (x.kind ? ' (' + x.kind + ')' : '');
       case 'traits': return x.category + ' — ' + x.source;
       case 'racialTraits': return x.race + ' — ' + x.source;
       case 'weapons': return `${x.prof}, ${x.dmgM} ${x.crit}` + (x.cost ? ', ' + x.cost : '');
@@ -263,6 +268,11 @@ const Library = (() => {
         if (x.scales) h += '<p class="small warn">Some values scale with level — adjust after adding.</p>';
         if (x.fromSpell && !(x.changes && x.changes.length)) h += '<p class="small muted">Auto-parsing found no fixed bonuses in this spell\'s text. It can still be added as a tracked effect, then refined with the "edit" link in the Play tab.</p>';
         if (x.note) h += statLine('Note', esc(x.note));
+        h += '<hr>' + (x.html || '');
+        break;
+      case 'classAbilities':
+        if (x.classes && x.classes.length) h += statLine('Class', esc(x.classes.join(', ')));
+        if (x.kind) h += statLine('Type', esc(x.kind === 'Su' ? 'Supernatural' : x.kind === 'Ex' ? 'Extraordinary' : x.kind === 'Sp' ? 'Spell-like' : x.kind));
         h += '<hr>' + (x.html || '');
         break;
       default:
