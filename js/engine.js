@@ -1049,7 +1049,13 @@ const PF = (() => {
     if (!entry) return [];
     if (entry.__chg) return entry.__chg;
     const src = entry.html || entry.benefit || entry.body || (entry.desc ? '<p>' + entry.desc + '</p>' : '');
-    entry.__chg = parseChanges(src, { permanent: true });
+    // Skip aggregate/reference entries — e.g. Signature Skill inlines every skill's
+    // unlock text (~23k chars), so its scattered "+N bonus" phrases are NOT flat
+    // bonuses the feat grants. Implausibly long text, or too many parsed changes
+    // for a single entry, ⇒ don't auto-apply (a real feat/trait grants 1–2).
+    let changes = stripTags(src).length > 2000 ? [] : parseChanges(src, { permanent: true });
+    if (changes.length > 3) changes = [];
+    entry.__chg = changes;
     return entry.__chg;
   }
   // always-on bonuses from chosen traits, alternate racial traits, class
