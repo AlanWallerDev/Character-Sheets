@@ -20,6 +20,7 @@ const PDF = (() => {
       if (window.UI && window.UI.alert) window.UI.alert(msg, { title: 'PDF export' }); else alert(msg);
       return;
     }
+    c = PF.effective(c, { buffs: false });   // bake permanent feature/trait bonuses into the base
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
     const pageW = doc.internal.pageSize.getWidth();
@@ -216,6 +217,26 @@ const PDF = (() => {
       para('Armor check penalty: ' + PF.armorCheckPenalty(c) + '   •   (c) = class skill', { size: 8, color: COL.muted });
     }
 
+    // ---------------- class features & abilities ----------------
+    const cf = PF.classFeatures(c);
+    const abilByClass = {};
+    for (const a of (c.classAbilities || [])) (abilByClass[a.cls] = abilByClass[a.cls] || []).push(a.name);
+    if (cf.some(g => g.features.length) || Object.keys(abilByClass).length) {
+      sectionHeader('Class Features');
+      const multi = cf.length > 1;
+      for (const grp of cf) {
+        const abils = abilByClass[grp.clsName] || [];
+        if (!grp.features.length && !abils.length) continue;
+        const featStr = grp.features.map(f => {
+          const disp = f.name.charAt(0).toUpperCase() + f.name.slice(1);
+          return disp + (f.levels.length ? ' (' + f.levels.join(',') + ')' : '');
+        }).join(', ');
+        if (multi) { if (featStr) keyVal(grp.clsName + ' ' + grp.lvl + ':', featStr); }
+        else if (featStr) para(featStr, { size: 9.5 });
+        if (abils.length) keyVal(multi ? '  Abilities:' : 'Abilities:', abils.join(', '));
+      }
+    }
+
     // ---------------- feats / traits ----------------
     if (c.feats.length) {
       sectionHeader('Feats');
@@ -231,8 +252,12 @@ const PDF = (() => {
       para(c.traits.join(', '), { size: 9.5 });
     }
     if (race) {
+      // standard traits with alternate-replaced ones removed, then the alternates
+      const rtData = PF.racialTraits(c);
+      const rtList = rtData.standard.filter(s => !s.replaced).map(s => s.name)
+        .concat(rtData.alternates.map(a => a.name + ' (alt)'));
       sectionHeader('Racial Traits');
-      para((race.traits || []).map(rt => rt.name).concat((c.altTraits || []).map(a => a + ' (alt)')).join(', ') || '—', { size: 9.5 });
+      para(rtList.join(', ') || '—', { size: 9.5 });
     }
     if (c.languages) { ensure(16); keyVal('Languages:', c.languages); }
 
@@ -259,6 +284,12 @@ const PDF = (() => {
           keyVal('Level ' + lvl + ':', byLvl[lvl].map(s => s.name + (s.prepared ? ' (x' + s.prepared + ')' : '')).join(', '));
         }
       }
+    }
+    // spell-like abilities / spells not tied to a casting class
+    const otherSpells = c.spells.filter(s => !s.cls);
+    if (otherSpells.length) {
+      sectionHeader('Spell-Like Abilities & Other Spells');
+      para(otherSpells.map(s => s.name + (s.note ? ' (' + s.note + ')' : '')).join(', '), { size: 9.5 });
     }
 
     // ---------------- gear ----------------
