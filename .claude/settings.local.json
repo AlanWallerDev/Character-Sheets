@@ -73,10 +73,7 @@
       "Bash(node --check js/sheet.js)",
       "Bash(sed -i 's|engine.js?v=20|engine.js?v=21|; s|sheet.js?v=11|sheet.js?v=12|; s|app.js?v=37|app.js?v=38|' index.html)",
       "Bash(node --check js/custom.js)",
-      "Bash(sed -i 's|engine.js?v=26|engine.js?v=27|; s|custom.js?v=1|custom.js?v=2|; s|app.js?v=44|app.js?v=45|' index.html)",
-      "Bash(git --no-pager log --oneline -6)",
-      "Bash(node --check js/pdf.js)",
-      "Bash(sed -i 's|pdf.js?v=3|pdf.js?v=4|' index.html)"
+      "Bash(sed -i 's|engine.js?v=26|engine.js?v=27|; s|custom.js?v=1|custom.js?v=2|; s|app.js?v=44|app.js?v=45|' index.html)"
     ]
   }
 }

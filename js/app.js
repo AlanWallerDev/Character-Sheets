@@ -556,11 +556,10 @@
   }
 
   function statBar(c) {
-    const e = PF.effective(c, { buffs: false });   // include permanent trait/feature bonuses
-    const t = PF.totals(e);
-    const hp = PF.hpBreakdown(e);
-    const ac = PF.acBreakdown(e);
-    const sv = PF.saves(e);
+    const t = PF.totals(c);
+    const hp = PF.hpBreakdown(c);
+    const ac = PF.acBreakdown(c);
+    const sv = PF.saves(c);
     return `<div class="panel" style="display:flex;flex-wrap:wrap;align-items:center;gap:2px">
       <span class="stat-big"><span class="v">${c.levels.length}</span><span class="l">Level</span></span>
       <span class="stat-big"><span class="v">${hp.total}</span><span class="l">HP</span></span>
@@ -919,7 +918,7 @@
     const p = c.play;
     if (!p.customRolls) p.customRolls = [];
     const e = PF.effective(c);           // live stats with buffs/conditions applied
-    const buffed = !!e.__buffed;   // active buffs/conditions (features are always-on, not "live")
+    const buffed = e !== c;
     const hp = PF.currentHP(e);          // max HP must reflect Con buffs (e.g. Bear's Endurance)
     const ac = PF.acBreakdown(e);
     const sv = PF.saves(e);
@@ -1642,10 +1641,7 @@
         ${archs.length ? archs.map(a => `<span class="pill gold"><span class="ref" data-rt="archetypes" data-rn="${esc(a)}">${esc(a)}</span> <a href="#" data-delarch="${esc(a)}" data-arch-cls="${esc(clsName)}" title="remove" style="text-decoration:none">✕</a></span>`).join(' ') : '<span class="muted">none</span>'}
         <button class="small" data-addarch="${esc(clsName)}">+ Archetype</button></p>`;
       const abils = classAbilitiesFor(c, clsName);
-      // rough allowance: count the class's selectable-slot features gained by this level
-      let abilitySlots = 0;
-      if (grp) for (const f of grp.features) if (/rage power|\bhex|talent|arcana|discovery|revelation|\btrick/i.test(f.name)) abilitySlots += f.levels.length;
-      const abilHtml = `<p class="small" style="margin-top:6px"><b>Abilities</b> <span class="muted">(rage powers, hexes…)</span>${abilitySlots ? ` <span class="${abils.length > abilitySlots ? 'warn' : 'muted'}">— ${abils.length} of ~${abilitySlots} class slots</span>` : ''}:
+      const abilHtml = `<p class="small" style="margin-top:6px"><b>Abilities</b> <span class="muted">(rage powers, hexes, bloodlines…)</span>:
         ${abils.length ? abils.map(a => `<span class="pill gold"><span class="ref" data-rt="classAbility" data-rn="${esc(a)}">${esc(a)}</span> <a href="#" data-delability="${esc(a)}" data-ability-cls="${esc(clsName)}" title="remove" style="text-decoration:none">✕</a></span>`).join(' ') : '<span class="muted">none</span>'}
         <button class="small" data-addability="${esc(clsName)}">+ Ability</button></p>`;
       h += `<h3>${esc(clsName)} ${lvl}</h3>
@@ -1767,20 +1763,10 @@
     const traitCat = {};
     c.traits.forEach(tn => { const tr = PFDATA.traits.find(x => x.name === tn); if (tr && tr.category) traitCat[tr.category] = (traitCat[tr.category] || 0) + 1; });
     const dupCats = Object.keys(traitCat).filter(k => traitCat[k] > 1);
-    // trait allowance: baseline 2, +1 per drawback taken
-    const drawbacks = c.traits.filter(tn => { const tr = PFDATA.traits.find(x => x.name === tn); return tr && tr.category === 'Drawback'; }).length;
-    const regularTraits = c.traits.length - drawbacks;
-    const traitsAllowed = 2 + drawbacks;
-    // feat allowance: base (1 + 1/odd level) + class bonus feats + a racial bonus feat
-    let classBonusFeats = 0;
-    for (const grp of PF.classFeatures(c)) for (const f of grp.features) if (/^bonus feat/i.test(f.name)) classBonusFeats += f.levels.length;
-    const featRace = PF.getRace(c.race);
-    const racialBonusFeats = featRace && (featRace.traits || []).some(t => /bonus feat/i.test(t.name)) ? 1 : 0;
-    const featsAllowed = baseFeats + classBonusFeats + racialBonusFeats;
     main.innerHTML = `<h2>Feats & Traits</h2>${statBar(c)}
       <div class="row">
         <div class="panel">
-          <h3>Feats <span class="small ${c.feats.length > featsAllowed ? 'err' : 'muted'}">— ${c.feats.length} of ~${featsAllowed} (${baseFeats} base${classBonusFeats ? ` +${classBonusFeats} class` : ''}${racialBonusFeats ? ` +${racialBonusFeats} racial` : ''})</span></h3>
+          <h3>Feats <span class="small muted">(${c.feats.length} taken — level ${lvl} grants ${baseFeats} base; bonus feats from class/race/human not counted automatically)</span></h3>
           <button class="primary small" id="add-feat">+ Add Feat</button>
           <table class="data" style="margin-top:8px">
             ${c.feats.map((f, i) => {
@@ -1798,7 +1784,7 @@
           </table>
         </div>
         <div class="panel">
-          <h3>Traits <span class="small ${regularTraits > traitsAllowed ? 'err' : 'muted'}">— ${regularTraits} of ${traitsAllowed}${drawbacks ? ` (+${drawbacks} from drawback${drawbacks > 1 ? 's' : ''})` : ''}, different categories</span></h3>
+          <h3>Traits <span class="small muted">(standard: 2, from different categories)</span></h3>
           <button class="primary small" id="add-trait">+ Add Trait</button>
           ${dupCats.length ? `<p class="small err" style="margin:8px 0 0">⚠ More than one trait from the same category (${esc(dupCats.join(', '))}). The standard rules allow only one trait per category.</p>` : ''}
           <table class="data" style="margin-top:8px">
