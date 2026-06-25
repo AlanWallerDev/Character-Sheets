@@ -972,7 +972,7 @@ const PF = (() => {
     return String(s || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;|&#\d+;/gi, ' ').replace(/\s+/g, ' ').trim();
   }
 
-  const SPELL_BONUS_TYPES = 'enhancement|morale|luck|competence|sacred|profane|insight|resistance|deflection|dodge|alchemical|circumstance|size|racial|natural armor|armor|shield';
+  const SPELL_BONUS_TYPES = 'enhancement|morale|luck|competence|sacred|profane|insight|resistance|deflection|dodge|alchemical|circumstance|size|racial|trait|natural armor|armor|shield';
 
   function phraseToTargets(phrase, type) {
     const p = ' ' + phrase.toLowerCase() + ' ';
@@ -1005,20 +1005,28 @@ const PF = (() => {
     return [...out];
   }
 
-  // scan a spell's description for "+N [type] bonus/penalty to/on <stat>" patterns
-  function parseSpellChanges(spell) {
-    const text = stripTags(spell.html || (spell.desc ? '<p>' + spell.desc + '</p>' : ''));
+  // scan rules text for "+N [type] bonus/penalty to/on <stat>" patterns.
+  // opts.permanent skips obviously-conditional bonuses (while raging, X/day, vs…)
+  // so always-on application of traits/abilities doesn't grab situational ones.
+  const COND_RE = /\b(?:while|when(?:ever)?|during|against|versus|vs\.?|once per|per day|\/day|rounds? per|number of rounds|on a charge|to resist|made to|as a swift|as an immediate|in place of|selected|chosen|of your choice|that (?:skill|weapon))\b/i;
+  function parseChanges(html, opts) {
+    const text = stripTags(html || '');
     if (!text) return [];
+    const permanent = opts && opts.permanent;
     const re = new RegExp('([+\\-–]\\s?\\d+)\\s+(?:(' + SPELL_BONUS_TYPES + ')\\s+)?(bonus|penalty)\\s+(?:to|on)\\s+([^.;]+)', 'gi');
     const seen = new Set();
     const out = [];
     let m;
     while ((m = re.exec(text))) {
+      if (permanent) {
+        const ctx = text.slice(Math.max(0, m.index - 90), m.index + m[0].length + 20);
+        if (COND_RE.test(ctx)) continue;
+      }
       let val = parseInt(m[1].replace('–', '-').replace(/\s/g, ''), 10);
       if (isNaN(val)) continue;
       if (/penalty/i.test(m[3]) && val > 0) val = -val;
-      const type = m[2] ? (/(natural armor|armor|shield)/i.test(m[2]) ? m[2].toLowerCase() : m[2].toLowerCase()) : 'untyped';
-      let phrase = m[4].split(/\b(?:against|while|until|equal|made to|to resist|for the|in addition|and takes?|and a |and suffers?|but|penalty)\b/i)[0];
+      const type = m[2] ? m[2].toLowerCase() : 'untyped';
+      const phrase = m[4].split(/\b(?:against|while|until|equal|made to|to resist|for the|in addition|and takes?|and a |and suffers?|but|penalty)\b/i)[0];
       const stackType = /^(natural armor|armor|shield)$/.test(type) ? (type === 'natural armor' ? 'enhancement' : 'untyped') : type;
       for (const tgt of phraseToTargets(phrase, type)) {
         const key = tgt + ':' + val;
@@ -1028,6 +1036,33 @@ const PF = (() => {
       }
       if (out.length >= 12) break;
     }
+    return out;
+  }
+  function parseSpellChanges(spell) {
+    return parseChanges(spell.html || (spell.desc ? '<p>' + spell.desc + '</p>' : ''));
+  }
+
+  // permanent stat changes parsed from a content entry's text, cached on it.
+  // Source text varies by type: spells/traits/abilities use `html`; feats put the
+  // mechanical text in `benefit` (then `body`/`desc`).
+  function entryChanges(entry) {
+    if (!entry) return [];
+    if (entry.__chg) return entry.__chg;
+    const src = entry.html || entry.benefit || entry.body || (entry.desc ? '<p>' + entry.desc + '</p>' : '');
+    entry.__chg = parseChanges(src, { permanent: true });
+    return entry.__chg;
+  }
+  // always-on bonuses from chosen traits, alternate racial traits, class
+  // abilities (rage powers, etc.) and feats → [{target, type, value, source}].
+  // The conditional/choice skip in parseChanges keeps situational (while raging)
+  // and choice-specific (Weapon Focus → selected weapon) bonuses out.
+  function featureChanges(c) {
+    const out = [];
+    const collect = (entry, src) => { for (const ch of entryChanges(entry)) out.push({ target: ch.target, type: ch.type, value: ch.value, source: src }); };
+    for (const tn of (c.traits || [])) collect((PFDATA.traits || []).find(x => x.name === tn), tn);
+    for (const an of (c.altTraits || [])) collect(getRacialTrait(an), an);
+    for (const a of (c.classAbilities || [])) collect(getClassAbility(a.name), a.name);
+    for (const f of (c.feats || [])) collect(getFeat(f.name || f), f.name || f);
     return out;
   }
 
@@ -1081,13 +1116,18 @@ const PF = (() => {
     return sum;
   }
 
-  // a clone of the character with all active buffs/conditions applied
-  function effective(c) {
-    const active = ((c.play || {}).buffs || []).filter(b => b.active);
-    if (!active.length) return c;
+  // a clone of the character with permanent feature bonuses (traits, abilities…)
+  // and, unless opts.buffs === false, active buffs/conditions folded in.
+  // Permanent features apply everywhere (sheet base); buffs are Play-tab only.
+  function effective(c, opts) {
+    const includeBuffs = !opts || opts.buffs !== false;
+    const feats = featureChanges(c);
+    const active = includeBuffs ? ((c.play || {}).buffs || []).filter(b => b.active) : [];
+    if (!feats.length && !active.length) return c;
     const e = JSON.parse(JSON.stringify(c));
-    e.__buffed = true;
+    e.__buffed = active.length > 0;
     const buckets = {};
+    for (const ch of feats) (buckets[ch.target] = buckets[ch.target] || []).push(ch);
     for (const b of active) {
       for (const ch of b.changes || []) {
         (buckets[ch.target] = buckets[ch.target] || []).push(ch);
@@ -1384,7 +1424,7 @@ const PF = (() => {
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
     getCompSpecies, getFamiliarSpecies,
     CONDITIONS, newPlayState, stackTotal, effective, currentHP, rollDice,
-    buffLibrary, spellToBuff, parseSpellChanges,
+    buffLibrary, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
     featPrereqs, checkFeatPrereqs, featParents, casterLevelOf, maxSpellLevel,
     newCompanionPlay, companionAttacks,
   };

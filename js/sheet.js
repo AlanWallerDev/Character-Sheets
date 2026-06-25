@@ -12,6 +12,10 @@ const Sheet = (() => {
   }
 
   function render(c) {
+    // resolve permanent feature bonuses (traits, abilities, alt racial traits) into
+    // the base stats shown here; buffs are excluded (those are the Play tab's job).
+    const fchg = PF.featureChanges(c);
+    c = PF.effective(c, { buffs: false });
     const t = PF.totals(c);
     const hp = PF.hpBreakdown(c);
     const ac = PF.acBreakdown(c);
@@ -55,6 +59,14 @@ const Sheet = (() => {
       <span class="stat-big roller" data-roll-label="Reflex" data-roll-mod="${sv.ref}" title="click to roll"><span class="v">${fmt(sv.ref)}</span><span class="l">Reflex</span></span>
       <span class="stat-big roller" data-roll-label="Will" data-roll-mod="${sv.will}" title="click to roll"><span class="v">${fmt(sv.will)}</span><span class="l">Will</span></span>
     </div>`;
+    if (fchg.length) {
+      const LBL = { str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha',
+        attack: 'attack', damage: 'damage', init: 'initiative', speed: 'speed', skills: 'all skills',
+        cmb: 'CMB', cmd: 'CMD', fort: 'Fort', ref: 'Ref', will: 'Will', saves: 'all saves',
+        natural: 'natural armor', deflection: 'deflection AC', dodge: 'dodge AC', armor: 'armor AC', acMisc: 'AC' };
+      h += `<p class="small muted">Trait &amp; feature bonuses applied above: ` + fchg.map(ch =>
+        `${ch.value >= 0 ? '+' : ''}${ch.value} ${esc(LBL[ch.target] || ch.target)} <span class="tag">(${esc(ch.source)})</span>`).join(', ') + `</p>`;
+    }
 
     // attacks (ammunition is excluded here and tracked separately below)
     const weapons = c.gear.filter(g => g.kind === 'weapon' && !PF.gearIsAmmo(g));
