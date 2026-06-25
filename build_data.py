@@ -383,6 +383,40 @@ def extract_classes(books):
 
 # ---------------------------------------------------------------- archetypes
 
+def extract_mythic_abilities(books):
+    # Mythic path abilities (the powers a mythic character selects), grouped under
+    # "Nth-Tier <Path> Path Abilities" sections in the Mythic Adventures book.
+    bk = books.get('ma')
+    if not bk:
+        return []
+    pat = re.compile(r'(\d+)(?:st|nd|rd|th)-Tier\s+(Archmage|Champion|Guardian|Hierophant|Marshal|Trickster|Universal)\s+Path\s+Abilit', re.I)
+    out, seen = [], set()
+    for r in bk.rows:
+        if r['type'] != 'ability':
+            continue
+        path = tier = None
+        for a in bk.ancestors(r['section_id']):
+            m = pat.search(a.get('name') or '')
+            if m:
+                tier = int(m.group(1))
+                path = m.group(2).title()
+                break
+        if not path:
+            continue
+        k = r['name'].lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append({
+            'name': r['name'],
+            'path': path,
+            'tier': tier,
+            'source': bk.name,
+            'html': bk.subtree_html(r['section_id']),
+        })
+    return out
+
+
 def extract_archetypes(books):
     out = []
     seen = set()
@@ -1715,6 +1749,7 @@ def main():
     write_js('skills.js', 'skills', extract_skills(books))
     write_js('companions.js', 'companions', extract_companions(books))
     write_js('classabilities.js', 'classAbilities', extract_foundry_classfeatures())
+    write_js('mythicabilities.js', 'mythicAbilities', extract_mythic_abilities(books))
     write_js('buffs.js', 'buffs', extract_foundry_buffs())
     print('Done.')
 

@@ -13,6 +13,7 @@ const Library = (() => {
     classes: { label: 'Classes', data: () => PFDATA.classes },
     archetypes: { label: 'Archetypes', data: () => PFDATA.archetypes },
     classAbilities: { label: 'Class Abilities (rage powers, hexes…)', data: () => PFDATA.classAbilities || [] },
+    mythicAbilities: { label: 'Mythic Path Abilities', data: () => PFDATA.mythicAbilities || [] },
     feats: { label: 'Feats', data: () => PFDATA.feats },
     spells: { label: 'Spells', data: () => PFDATA.spells },
     traits: { label: 'Character Traits', data: () => PFDATA.traits },
@@ -79,6 +80,9 @@ const Library = (() => {
       out.push(sel('acls', 'Class', uniq(PFDATA.archetypes.map(a => a.class))));
     } else if (type === 'classAbilities') {
       out.push(sel('cacls', 'Class', uniq((PFDATA.classAbilities || []).flatMap(a => a.classes || []))));
+    } else if (type === 'mythicAbilities') {
+      out.push(sel('mpath', 'Path', uniq((PFDATA.mythicAbilities || []).map(a => a.path))));
+      out.push(sel('mtier', 'Tier', uniq((PFDATA.mythicAbilities || []).map(a => a.tier && String(a.tier)))));
     } else if (type === 'traits') {
       out.push(sel('tcat', 'Category', uniq(PFDATA.traits.map(t => t.category))));
     } else if (type === 'racialTraits') {
@@ -119,6 +123,8 @@ const Library = (() => {
       if (type === 'items' && state.cat && x.category !== state.cat) return false;
       if (type === 'archetypes' && state.acls && x.class !== state.acls) return false;
       if (type === 'classAbilities' && state.cacls && !(x.classes || []).includes(state.cacls)) return false;
+      if (type === 'mythicAbilities' && state.mpath && x.path !== state.mpath) return false;
+      if (type === 'mythicAbilities' && state.mtier && String(x.tier) !== state.mtier) return false;
       if (type === 'traits' && state.tcat && x.category !== state.tcat) return false;
       if (type === 'racialTraits' && state.race && x.race !== state.race) return false;
       if (type === 'weapons' && state.prof && x.prof !== state.prof) return false;
@@ -135,6 +141,7 @@ const Library = (() => {
       case 'items': return [x.category, x.price].filter(Boolean).join(' — ');
       case 'archetypes': return x.class + ' — ' + x.source;
       case 'classAbilities': return (x.classes || []).join(', ') + (x.kind ? ' (' + x.kind + ')' : '');
+      case 'mythicAbilities': return x.path + (x.tier ? ' — Tier ' + x.tier : '');
       case 'traits': return x.category + ' — ' + x.source;
       case 'racialTraits': return x.race + ' — ' + x.source;
       case 'weapons': return `${x.prof}, ${x.dmgM} ${x.crit}` + (x.cost ? ', ' + x.cost : '');
@@ -273,6 +280,11 @@ const Library = (() => {
       case 'classAbilities':
         if (x.classes && x.classes.length) h += statLine('Class', esc(x.classes.join(', ')));
         if (x.kind) h += statLine('Type', esc(x.kind === 'Su' ? 'Supernatural' : x.kind === 'Ex' ? 'Extraordinary' : x.kind === 'Sp' ? 'Spell-like' : x.kind));
+        h += '<hr>' + (x.html || '');
+        break;
+      case 'mythicAbilities':
+        if (x.path) h += statLine('Path', esc(x.path));
+        if (x.tier) h += statLine('Minimum tier', esc(String(x.tier)));
         h += '<hr>' + (x.html || '');
         break;
       default:

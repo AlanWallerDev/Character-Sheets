@@ -1841,6 +1841,8 @@
       const slots = PF.spellSlots(c, clsName);
       const known = PF.spellsKnownRow(c, clsName);
       const mySpells = c.spells.filter(s => s.cls === clsName);
+      const selByLvl = {};   // spells the character has recorded, per spell level
+      for (const s of mySpells) selByLvl[s.lvl] = (selByLvl[s.lvl] || 0) + 1;
       h += `<div class="panel">
         <h3>${esc(clsName)} ${lvl} <span class="small muted">— ${info.kind} caster, ${PF.ABILITY_NAMES[info.ability]}-based
           (uses ${esc(info.list)} spell list)</span></h3>`;
@@ -1853,7 +1855,11 @@
         const cell = s => s.total == null ? '—' : s.total;
         h += `<table class="data small"><tr><th>Spell level</th>${cols.map(s => `<th class="num">${s.lvl}</th>`).join('')}</tr>
           <tr><td>Slots/day (incl. ability bonus)</td>${cols.map(s => `<td class="num">${cell(s)}</td>`).join('')}</tr>
-          ${known ? `<tr><td>Spells known</td>${cols.map(s => `<td class="num">${known[s.lvl] == null ? '—' : known[s.lvl]}</td>`).join('')}</tr>` : ''}
+          ${known ? `<tr><td>Spells known (selected / max)</td>${cols.map(s => {
+            if (known[s.lvl] == null) return `<td class="num">—</td>`;
+            const sel = selByLvl[s.lvl] || 0;
+            return `<td class="num ${sel > known[s.lvl] ? 'err' : ''}">${sel}/${known[s.lvl]}</td>`;
+          }).join('')}</tr>` : ''}
           <tr><td>Save DC</td>${cols.map(s => `<td class="num">${s.total == null ? '—' : 10 + s.lvl + PF.abilityMod(c, info.ability)}</td>`).join('')}</tr>
         </table>`;
       } else {
@@ -1863,7 +1869,9 @@
       const byLvl = {};
       for (const s of mySpells) (byLvl[s.lvl] = byLvl[s.lvl] || []).push(s);
       for (const sl of Object.keys(byLvl).sort((a, b) => a - b)) {
-        h += `<h4>Level ${sl}</h4><table class="data small">`;
+        const knownAnno = known && known[+sl] != null
+          ? ` <span class="small ${(selByLvl[+sl] || 0) > known[+sl] ? 'err' : 'muted'}">(${selByLvl[+sl] || 0} of ${known[+sl]} known)</span>` : '';
+        h += `<h4>Level ${sl}${knownAnno}</h4><table class="data small">`;
         for (const s of byLvl[sl]) {
           const spell = PF.getSpell(s.name);
           const gi = c.spells.indexOf(s);
