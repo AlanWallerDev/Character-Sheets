@@ -1171,7 +1171,9 @@
           ${(p.counters || []).map((k, i) => `<div style="margin-top:4px;display:flex;gap:6px;align-items:center">
             <input style="width:150px" data-cntname="${i}" value="${esc(k.name)}">
             <button class="small" data-cntmod="${i}:-1">−</button>
-            <b>${k.cur}</b> <span class="muted">/</span> <input class="tiny" type="number" min="0" data-cntmax="${i}" value="${k.max || 0}" title="maximum (0 = no cap)">
+            <span class="small muted">have</span> <b title="current quantity">${k.cur}</b>
+            <span class="muted">/</span>
+            <span class="small muted">max</span> <input class="tiny" type="number" min="0" data-cntmax="${i}" value="${k.max || 0}" title="maximum (0 = no cap)">
             <button class="small" data-cntmod="${i}:1">+</button>
             <button class="small danger" data-cntdel="${i}">✕</button>
           </div>`).join('')}
