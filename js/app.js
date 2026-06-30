@@ -151,7 +151,8 @@
       ['play', '▶ Play'],
       ['profile', 'Profile'], ['abilities', 'Abilities'], ['race', 'Race'],
       ['classes', 'Classes'], ['skills', 'Skills'], ['feats', 'Feats & Traits'],
-      ['spells', 'Spells'], ['gear', 'Gear'], ['companions', 'Companions'], ['notes', 'Notes'],
+      ['spells', 'Spells'], ['gear', 'Gear'], ['companions', 'Companions'],
+      ['mythic', '✦ Mythic'], ['notes', 'Notes'],
     ];
     app.innerHTML = `
       ${state.sidebarHidden ? '<button id="sb-open" class="sb-toggle no-print" title="Show menu">☰</button>' : ''}
@@ -472,6 +473,14 @@
         const ab = PF.getClassAbility(name) || (PFDATA.classAbilities || []).find(a => a.name.toLowerCase() === String(name).toLowerCase());
         return ab ? Library.detailHTML('classAbilities', ab) : null;
       }
+      case 'mythicAbility': {
+        const ab = PF.getMythicAbility(name) || (PFDATA.mythicAbilities || []).find(a => a.name.toLowerCase() === String(name).toLowerCase());
+        return ab ? Library.detailHTML('mythicAbilities', ab) : null;
+      }
+      case 'mythicSpell': {
+        const ms = PF.getMythicSpell(name);   // name = base spell name
+        return ms ? Library.detailHTML('mythicSpells', ms) : null;
+      }
     }
     if (!entry) return null;
     let html = Library.detailHTML(type, entry);
@@ -538,7 +547,7 @@
       play: tabPlay,
       profile: tabProfile, abilities: tabAbilities, race: tabRace, classes: tabClasses,
       skills: tabSkills, feats: tabFeats, spells: tabSpells, gear: tabGear,
-      companions: tabCompanions, notes: tabNotes,
+      companions: tabCompanions, mythic: tabMythic, notes: tabNotes,
     };
     (tabs[state.builderTab] || tabProfile)(main, c);
   }
@@ -922,6 +931,24 @@
     if (!c.play) { c.play = PF.newPlayState(); }
     const p = c.play;
     if (!p.customRolls) p.customRolls = [];
+    const mythTier = (c.mythic && c.mythic.tier) || 0;
+    const mythPowerMax = PF.mythicPowerUses(mythTier);
+    const mythSurge = PF.mythicSurgeDie(mythTier);
+    let mythicHtml = '';
+    if (mythTier > 0) {
+      const used = p.mythicUsed || 0;
+      mythicHtml = `<div class="panel">
+        <h3>✦ Mythic <span class="small muted">— Tier ${mythTier}${c.mythic.path ? ', ' + esc(c.mythic.path) : ''}</span></h3>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <span><b>Mythic Power</b>
+            <button class="small" data-mythuse="-1" title="regain">−</button>
+            <b class="${used >= mythPowerMax ? 'err' : ''}">${Math.max(0, mythPowerMax - used)}</b> <span class="muted">/ ${mythPowerMax} left</span>
+            <button class="small" data-mythuse="1" title="spend">＋</button></span>
+          ${mythSurge ? `<button class="small roll-chip" data-roll-label="Mythic Surge" data-roll-nod20="1" data-roll-dice="${mythSurge}" title="add to a d20 roll">✦ Surge ${mythSurge}</button>` : ''}
+        </div>
+        ${(c.mythic.abilities || []).length ? `<p class="small" style="margin-top:8px"><b>Path abilities:</b> ${c.mythic.abilities.map(esc).join(', ')}</p>` : ''}
+      </div>`;
+    }
     const e = PF.effective(c);           // live stats with buffs/conditions applied
     const buffed = !!e.__buffed;   // active buffs/conditions (features are always-on, not "live")
     const hp = PF.currentHP(e);          // max HP must reflect Con buffs (e.g. Bear's Endurance)
@@ -1181,6 +1208,7 @@
         </div>
       </div>
 
+      ${mythicHtml}
       ${companionsHtml}
       ${slotsHtml ? `<div class="panel"><h3>Spell Slots</h3>${slotsHtml}
         <p class="small muted">Buffed stats don't change save DCs unless the buff raises the casting ability.</p></div>` : ''}
@@ -1205,6 +1233,7 @@
     $('#rest-btn').addEventListener('click', () => adj(() => {
       p.slotsUsed = {};
       for (const k of (p.counters || [])) if (k.max) k.cur = k.max;  // daily resources refresh
+      p.mythicUsed = 0;
       p.nonlethal = 0;
       p.hpDamage = Math.max(0, (p.hpDamage || 0) - c.levels.length);
       for (const comp of c.companions || []) {
@@ -1349,6 +1378,10 @@
     }));
     main.querySelectorAll('[data-addres]').forEach(b => b.addEventListener('click', () => {
       p.counters.push({ name: b.dataset.addres, cur: 0, max: 0 });
+      save(); render();
+    }));
+    main.querySelectorAll('[data-mythuse]').forEach(b => b.addEventListener('click', () => {
+      p.mythicUsed = Math.max(0, Math.min(mythPowerMax, (p.mythicUsed || 0) + parseInt(b.dataset.mythuse, 10)));
       save(); render();
     }));
     const clearBtn = $('#clear-rolls');
@@ -1879,7 +1912,9 @@
         for (const s of byLvl[sl]) {
           const spell = PF.getSpell(s.name);
           const gi = c.spells.indexOf(s);
-          h += `<tr><td style="width:26%"><b>${esc(s.name)}</b></td>
+          const myth = PF.isMythic(c) && PF.getMythicSpell(s.name)
+            ? ` <span class="small" style="color:var(--accent)" title="Has a mythic version — see Library → Mythic Spells">✦ mythic</span>` : '';
+          h += `<tr><td style="width:26%"><b>${esc(s.name)}</b>${myth}</td>
             <td class="small muted">${spell ? esc(spell.school + ' — ' + (spell.desc || '').slice(0, 90)) : ''}</td>
             <td style="width:110px"><label class="small">prep/cast <input class="tiny" type="number" min="0" data-prep="${gi}" value="${s.prepared || ''}"></label></td>
             <td><button class="small danger" data-delspell="${gi}">✕</button></td></tr>`;
@@ -2205,6 +2240,62 @@
   }
 
   // ----- notes -----
+  // ----- mythic -----
+  function tabMythic(main, c) {
+    if (!c.mythic) c.mythic = { tier: 0, path: '', abilities: [] };
+    const m = c.mythic;
+    const tier = m.tier || 0;
+    const pathData = PF.getMythicPath(m.path);
+    const surge = PF.mythicSurgeDie(tier), power = PF.mythicPowerUses(tier);
+    const univ = PF.mythicUniversalFeatures(tier);
+    const myFeats = (c.feats || []).filter(f => { const ft = PF.getFeat(f.name || f); return ft && (ft.types || []).includes('Mythic'); });
+    main.innerHTML = `<h2>✦ Mythic</h2>${statBar(c)}
+      <div class="row">
+        <div class="panel" style="flex:1;min-width:300px">
+          <div class="grid2">
+            ${field('Mythic Tier', `<select id="myth-tier">${[0,1,2,3,4,5,6,7,8,9,10].map(t => `<option value="${t}" ${tier === t ? 'selected' : ''}>${t === 0 ? '— not mythic —' : 'Tier ' + t}</option>`).join('')}</select>`)}
+            ${field('Mythic Path', `<select id="myth-path"><option value="">— choose —</option>${PF.MYTHIC_PATHS.map(p => `<option ${m.path === p ? 'selected' : ''}>${p}</option>`).join('')}</select>`)}
+          </div>
+          ${tier > 0 ? `
+            <p class="small" style="margin-top:4px"><b>Mythic Power</b> ${power}/day • <b>Surge</b> ${surge} • ${tier >= 2 ? `<b>Amazing Initiative</b> +${tier} init` : '<span class="muted">Amazing Initiative at tier 2</span>'}</p>
+            <h4>Universal mythic features <span class="small muted">(shared by all paths)</span></h4>
+            <div>${univ.map(f => `<span class="pill">${esc(f.name)} <span class="muted small">(T${f.tier})</span></span>`).join(' ') || '<span class="muted small">none yet</span>'}</div>
+            <p class="small muted">Your path also grants its own features and bonuses at each tier — see the description on the right.</p>
+            <h4 style="margin-top:10px">Path abilities <span class="small muted">(${m.abilities.length} selected)</span></h4>
+            <div>${m.abilities.length ? m.abilities.map(a => `<span class="pill gold"><span class="ref" data-rt="mythicAbility" data-rn="${esc(a)}">${esc(a)}</span> <a href="#" data-delmyth="${esc(a)}" title="remove" style="text-decoration:none">✕</a></span>`).join(' ') : '<span class="muted small">none selected</span>'}</div>
+            <button class="small" id="add-myth-ability" style="margin-top:6px"${m.path ? '' : ' disabled title="choose a path first"'}>+ Path Ability</button>
+            <h4 style="margin-top:10px">Mythic feats</h4>
+            <div>${myFeats.length ? myFeats.map(f => `<span class="pill">${esc(f.name || f)}</span>`).join(' ') : '<span class="muted small">none</span>'}</div>
+            <p class="small muted">Add mythic feats in the <a href="#" data-tab-jump="feats">Feats &amp; Traits</a> tab (Type filter → Mythic).</p>
+          ` : '<p class="muted" style="margin-top:8px">Set a Mythic Tier above to make this character mythic. Mythic grants mythic power, a surge die, path abilities, and access to mythic feats.</p>'}
+        </div>
+        <div class="panel" style="flex:1;min-width:300px" id="myth-detail">
+          ${pathData ? `<h3>${esc(m.path)} <span class="small muted">— Mythic Path</span></h3>${pathData.html || ''}`
+            : (m.path ? `<p class="muted">Path “${esc(m.path)}” not found in data.</p>` : '<p class="muted">Choose a mythic path to see its description and abilities.</p>')}
+        </div>
+      </div>`;
+    bind('myth-tier', c, v => {
+      c.mythic.tier = parseInt(v, 10) || 0;
+      // don't leave more mythic power "spent" than the new tier allows
+      if (c.play) c.play.mythicUsed = Math.min(c.play.mythicUsed || 0, PF.mythicPowerUses(c.mythic.tier));
+      render();
+    });
+    bind('myth-path', c, v => { c.mythic.path = v; render(); });
+    const addBtn = $('#add-myth-ability');
+    if (addBtn) addBtn.addEventListener('click', () =>
+      Library.pickModal('mythicAbilities', 'Mythic Path Ability — ' + (m.path || ''), a => {
+        if (!c.mythic.abilities.includes(a.name)) { c.mythic.abilities.push(a.name); save(); render(); }
+      }, { mpath: m.path }));
+    main.querySelectorAll('[data-delmyth]').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      c.mythic.abilities = c.mythic.abilities.filter(x => x !== a.dataset.delmyth);
+      save(); render();
+    }));
+    const jump = main.querySelector('[data-tab-jump]');
+    if (jump) jump.addEventListener('click', e => { e.preventDefault(); state.builderTab = jump.dataset.tabJump; render(); });
+    attachRefPopovers(main, c);
+  }
+
   function tabNotes(main, c) {
     main.innerHTML = `<h2>Notes</h2>${statBar(c)}
       <div class="panel">

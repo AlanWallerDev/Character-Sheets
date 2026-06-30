@@ -76,7 +76,17 @@
       "Bash(sed -i 's|engine.js?v=26|engine.js?v=27|; s|custom.js?v=1|custom.js?v=2|; s|app.js?v=44|app.js?v=45|' index.html)",
       "Bash(git --no-pager log --oneline -6)",
       "Bash(node --check js/pdf.js)",
-      "Bash(sed -i 's|pdf.js?v=3|pdf.js?v=4|' index.html)"
+      "Bash(sed -i 's|pdf.js?v=3|pdf.js?v=4|' index.html)",
+      "Bash(python -c \"import reportlab; print\\(reportlab.Version\\)\")",
+      "Bash(python -m pip install reportlab --quiet)",
+      "Bash(python make_pdf.py)",
+      "Bash(git -c core.autocrlf=false diff HEAD -- js/engine.js index.html)",
+      "Bash(git -c core.autocrlf=false diff HEAD -- js/app.js)",
+      "Bash(grep -E '^diff --git|^@@' __TRACKED_VAR__/sel.patch)",
+      "Bash(git commit -m 'Fix companion secondary attacks \\(−5 to hit\\); add no-cache headers *)",
+      "Bash(git push *)",
+      "Bash(git rev-list *)",
+      "Bash(git fetch *)"
     ]
   }
 }

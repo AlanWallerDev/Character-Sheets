@@ -417,6 +417,39 @@ def extract_mythic_abilities(books):
     return out
 
 
+def extract_mythic_paths():
+    out = []
+    for d in load_nedb('mythic-paths'):
+        name = re.sub(r'^\(Mythic\)\s*', '', d.get('name', '').strip())
+        if not name:
+            continue
+        s = d.get('system', {})
+        desc = s.get('description') or {}
+        html = clean_foundry_html(desc.get('value') if isinstance(desc, dict) else '')
+        # drop the leading "Source … pg. N" line and de-link external <a> tags
+        html = re.sub(r'^\s*<p>\s*Source.*?<br\s*/?>', '<p>', html, flags=re.I | re.S)
+        html = re.sub(r'<a\b[^>]*>(.*?)</a>', r'\1', html, flags=re.S)
+        out.append({'name': name, 'source': COMPENDIUM_SRC, 'html': html})
+    return out
+
+
+def extract_mythic_spells(books):
+    bk = books.get('ma')
+    if not bk:
+        return []
+    out, seen = [], set()
+    for r in bk.rows:
+        if r['type'] != 'mythic_spell':
+            continue
+        k = r['name'].lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append({'name': r['name'], 'base': re.sub(r',?\s*Mythic\s*$', '', r['name']).strip(),
+                    'source': bk.name, 'html': bk.subtree_html(r['section_id'])})
+    return out
+
+
 def extract_archetypes(books):
     out = []
     seen = set()
@@ -1750,6 +1783,8 @@ def main():
     write_js('companions.js', 'companions', extract_companions(books))
     write_js('classabilities.js', 'classAbilities', extract_foundry_classfeatures())
     write_js('mythicabilities.js', 'mythicAbilities', extract_mythic_abilities(books))
+    write_js('mythicpaths.js', 'mythicPaths', extract_mythic_paths())
+    write_js('mythicspells.js', 'mythicSpells', extract_mythic_spells(books))
     write_js('buffs.js', 'buffs', extract_foundry_buffs())
     print('Done.')
 

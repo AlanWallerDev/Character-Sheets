@@ -49,6 +49,10 @@ const PF = (() => {
   const byName = (arr, name) => arr.find(x => x.name === name);
   const getClass = n => byName(PFDATA.classes, n);
   const getClassAbility = n => byName(PFDATA.classAbilities || [], n);
+  const getMythicPath = n => byName(PFDATA.mythicPaths || [], n);
+  const getMythicAbility = n => byName(PFDATA.mythicAbilities || [], n);
+  // the mythic version of a base spell (matched on the base spell name)
+  const getMythicSpell = base => (PFDATA.mythicSpells || []).find(s => s.base.toLowerCase() === String(base || '').toLowerCase());
   const getRace = n => byName(PFDATA.races, n);
   const getFeat = n => byName(PFDATA.feats, n);
   const getSpell = n => byName(PFDATA.spells, n);
@@ -88,6 +92,7 @@ const PF = (() => {
                 miscCMB: 0, miscCMD: 0, hpMisc: 0, speedMisc: 0,
                 carryStrBonus: 0, carryMult: 1, srNotes: '', resistNotes: '' },
       play: { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, buffs: [], counters: [], rolls: [] },
+      mythic: { tier: 0, path: '', abilities: [] },   // mythic tier 0 = non-mythic
       skillMiscAll: 0,
       hpMode: 'avg',         // 'avg' | 'roll' | 'max'
       notes: '', backstory: '',
@@ -1069,7 +1074,26 @@ const PF = (() => {
     for (const an of (c.altTraits || [])) collect(getRacialTrait(an), an);
     for (const a of (c.classAbilities || [])) collect(getClassAbility(a.name), a.name);
     for (const f of (c.feats || [])) collect(getFeat(f.name || f), f.name || f);
+    for (const an of ((c.mythic && c.mythic.abilities) || [])) collect(getMythicAbility(an), an);
+    // formula-based mythic feature: Amazing Initiative grants +tier to initiative at 2nd tier+
+    const tier = (c.mythic && c.mythic.tier) || 0;
+    if (tier >= 2) out.push({ target: 'init', type: 'insight', value: tier, source: 'Amazing Initiative' });
     return out;
+  }
+
+  // ---------- mythic ----------
+  const MYTHIC_PATHS = ['Archmage', 'Champion', 'Guardian', 'Hierophant', 'Marshal', 'Trickster'];
+  const isMythic = c => !!(c.mythic && c.mythic.tier > 0);
+  // surge die scales with tier; mythic power uses/day = 3 + 2×tier
+  const mythicSurgeDie = t => t >= 10 ? '1d12' : t >= 7 ? '1d10' : t >= 4 ? '1d8' : t >= 1 ? '1d6' : '';
+  const mythicPowerUses = t => t >= 1 ? 3 + 2 * t : 0;
+  // well-known universal mythic features by the tier they're gained
+  const MYTHIC_UNIVERSAL = [
+    [1, 'Hard to Kill'], [1, 'Mythic Power'], [2, 'Amazing Initiative'], [3, 'Recuperation'],
+    [5, 'Force of Will'], [8, 'Mythic Saving Throws'], [10, 'Immortal'],
+  ];
+  function mythicUniversalFeatures(tier) {
+    return MYTHIC_UNIVERSAL.filter(([t]) => t <= tier).map(([t, n]) => ({ tier: t, name: n }));
   }
 
   function spellToBuff(spell) {
@@ -1422,6 +1446,7 @@ const PF = (() => {
     classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat,
     classFeatures, parseArchetype, getArchetype, classFeatureHTML, archetypeFeatureHTML,
     racialTraits, getRacialTrait, limitedResources,
+    MYTHIC_PATHS, getMythicPath, getMythicAbility, getMythicSpell, isMythic, mythicSurgeDie, mythicPowerUses, mythicUniversalFeatures,
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,

@@ -137,6 +137,16 @@ const Sheet = (() => {
       }
     }
 
+    // mythic
+    if (PF.isMythic(c)) {
+      const mt = c.mythic;
+      h += `<h3>✦ Mythic</h3>`;
+      h += `<p class="small"><b>${esc(mt.path || 'No path')} — Tier ${mt.tier}</b> • Mythic Power ${PF.mythicPowerUses(mt.tier)}/day • Surge ${PF.mythicSurgeDie(mt.tier)}${mt.tier >= 2 ? ` • Amazing Initiative +${mt.tier}` : ''}</p>`;
+      const univ = PF.mythicUniversalFeatures(mt.tier);
+      if (univ.length) h += `<p><span class="small muted">Universal: </span>` + univ.map(f => `<span class="pill">${esc(f.name)}</span>`).join(' ') + '</p>';
+      if ((mt.abilities || []).length) h += `<p><span class="small muted">Path abilities: </span>` + mt.abilities.map(a => `<span class="pill gold">${ref('mythicAbility', a, a)}</span>`).join(' ') + '</p>';
+    }
+
     // feats & traits
     if (c.feats.length) {
       h += `<h3>Feats</h3><p>` + c.feats.map(f => {
@@ -180,7 +190,8 @@ const Sheet = (() => {
       const known = c.spells.filter(s => s.cls === clsName);
       if (known.length) {
         const byLvl = {};
-        let anyOff = false;
+        let anyOff = false, anyMyth = false;
+        const mythic = PF.isMythic(c);
         for (const s of known) (byLvl[s.lvl] = byLvl[s.lvl] || []).push(s);
         for (const lvl of Object.keys(byLvl).sort((a, b) => a - b)) {
           h += `<p><b>Level ${lvl}:</b> ` + byLvl[lvl].map(s => {
@@ -189,10 +200,12 @@ const Sheet = (() => {
             const nm = off
               ? `<span class="offlist" title="Not on the ${esc(clsName)} spell list">${ref('spells', s.name)} †</span>`
               : ref('spells', s.name);
-            return `${nm}${s.prepared ? ' <span class="muted small">(×' + s.prepared + ')</span>' : ''}`;
+            const myth = (mythic && PF.getMythicSpell(s.name)) ? (anyMyth = true, ` ${ref('mythicSpell', s.name, '✦')}`) : '';
+            return `${nm}${s.prepared ? ' <span class="muted small">(×' + s.prepared + ')</span>' : ''}${myth}`;
           }).join(', ') + '</p>';
         }
         if (anyOff) h += `<p class="small muted">† not on the ${esc(clsName)} spell list</p>`;
+        if (anyMyth) h += `<p class="small muted">✦ has a mythic version (hover)</p>`;
       }
     }
     // spell-like abilities / spells not tied to a casting class

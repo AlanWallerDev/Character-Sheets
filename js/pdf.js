@@ -237,6 +237,18 @@ const PDF = (() => {
       }
     }
 
+    // ---------------- mythic ----------------
+    if (PF.isMythic(c)) {
+      const mt = c.mythic;
+      sectionHeader('Mythic');
+      keyVal((mt.path || 'No path') + ' — Tier ' + mt.tier + ':',
+        'Mythic Power ' + PF.mythicPowerUses(mt.tier) + '/day, Surge ' + PF.mythicSurgeDie(mt.tier) +
+        (mt.tier >= 2 ? ', Amazing Initiative +' + mt.tier : ''));
+      const univ = PF.mythicUniversalFeatures(mt.tier).map(f => f.name);
+      if (univ.length) keyVal('Universal:', univ.join(', '));
+      if ((mt.abilities || []).length) keyVal('Path abilities:', mt.abilities.join(', '));
+    }
+
     // ---------------- feats / traits ----------------
     if (c.feats.length) {
       sectionHeader('Feats');

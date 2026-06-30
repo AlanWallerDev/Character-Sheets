@@ -14,6 +14,8 @@ const Library = (() => {
     archetypes: { label: 'Archetypes', data: () => PFDATA.archetypes },
     classAbilities: { label: 'Class Abilities (rage powers, hexes…)', data: () => PFDATA.classAbilities || [] },
     mythicAbilities: { label: 'Mythic Path Abilities', data: () => PFDATA.mythicAbilities || [] },
+    mythicPaths: { label: 'Mythic Paths', data: () => PFDATA.mythicPaths || [] },
+    mythicSpells: { label: 'Mythic Spells', data: () => PFDATA.mythicSpells || [] },
     feats: { label: 'Feats', data: () => PFDATA.feats },
     spells: { label: 'Spells', data: () => PFDATA.spells },
     traits: { label: 'Character Traits', data: () => PFDATA.traits },
@@ -123,7 +125,8 @@ const Library = (() => {
       if (type === 'items' && state.cat && x.category !== state.cat) return false;
       if (type === 'archetypes' && state.acls && x.class !== state.acls) return false;
       if (type === 'classAbilities' && state.cacls && !(x.classes || []).includes(state.cacls)) return false;
-      if (type === 'mythicAbilities' && state.mpath && x.path !== state.mpath) return false;
+      // a path's selectable abilities = that path + Universal (available to all paths)
+      if (type === 'mythicAbilities' && state.mpath && x.path !== state.mpath && x.path !== 'Universal') return false;
       if (type === 'mythicAbilities' && state.mtier && String(x.tier) !== state.mtier) return false;
       if (type === 'traits' && state.tcat && x.category !== state.tcat) return false;
       if (type === 'racialTraits' && state.race && x.race !== state.race) return false;
@@ -142,6 +145,8 @@ const Library = (() => {
       case 'archetypes': return x.class + ' — ' + x.source;
       case 'classAbilities': return (x.classes || []).join(', ') + (x.kind ? ' (' + x.kind + ')' : '');
       case 'mythicAbilities': return x.path + (x.tier ? ' — Tier ' + x.tier : '');
+      case 'mythicPaths': return 'Mythic Path — ' + (x.source || '');
+      case 'mythicSpells': return 'Mythic version of ' + (x.base || x.name);
       case 'traits': return x.category + ' — ' + x.source;
       case 'racialTraits': return x.race + ' — ' + x.source;
       case 'weapons': return `${x.prof}, ${x.dmgM} ${x.crit}` + (x.cost ? ', ' + x.cost : '');
@@ -286,6 +291,13 @@ const Library = (() => {
         if (x.path) h += statLine('Path', esc(x.path));
         if (x.tier) h += statLine('Minimum tier', esc(String(x.tier)));
         h += '<hr>' + (x.html || '');
+        break;
+      case 'mythicSpells':
+        if (x.base) h += statLine('Mythic version of', esc(x.base));
+        h += '<hr>' + (x.html || '');
+        break;
+      case 'mythicPaths':
+        h += (x.html || '');
         break;
       default:
         if (x.category) h += statLine('Category', esc(x.category));
