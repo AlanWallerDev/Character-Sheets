@@ -1248,7 +1248,8 @@ const PF = (() => {
       // dynamic attacks: recompute from the companion's live stats + play adjustments
       const count = Math.max(1, Math.min(8, parseInt(ca.count, 10) || 1));
       const abMod = (ca.atkAbility && ca.atkAbility !== 'none') ? mod(d.abilities[ca.atkAbility] || 10) : 0;
-      const atk = (d.bab || 0) + abMod + sizeM + atkMiscPlay + (parseInt(ca.atkBonus, 10) || 0) + buffAtk;
+      const secondary = ca.type === 'secondary' ? -5 : 0;   // secondary natural attacks take −5 to hit
+      const atk = (d.bab || 0) + abMod + sizeM + atkMiscPlay + (parseInt(ca.atkBonus, 10) || 0) + buffAtk + secondary;
       let dmgFlat = (parseInt(ca.dmgBonus, 10) || 0) + dmgMiscPlay + buffDmg;
       const mult = parseFloat(ca.dmgMult);
       if (mult) dmgFlat += Math.floor(strM * mult);

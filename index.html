@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Don't cache the HTML itself, so updated ?v= script versions are always picked up
+     (the dev server sends no cache headers; without this the browser serves a stale page). -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 
 <title>Pathfinder 1e Character Vault — free online PF1e character creator & manager</title>
 <meta name="description" content="A free, offline-capable Pathfinder 1st Edition character creator and manager. Build and play characters with every published class, feat, spell, race and item — point buy, leveling, spellcasting, companions, an in-session play tracker, printable sheets and PDF export.">

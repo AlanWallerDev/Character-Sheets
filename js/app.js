@@ -802,10 +802,13 @@
         <div class="field"><label>Number of attacks</label><input class="tiny" id="af-count" type="number" value="1" min="1" max="8"></div>
         <div class="field"><label>Attack uses</label><select id="af-atkab">
           <option value="str">Strength</option><option value="dex">Dexterity</option><option value="none">flat (no ability)</option></select></div>
+        <div class="field"><label>Attack type</label><select id="af-type">
+          <option value="primary">Primary (full attack bonus)</option>
+          <option value="secondary">Secondary (−5 to hit)</option></select></div>
         <div class="field"><label>Damage dice</label><input id="af-dice" placeholder="1d6, 2d8"></div>
         <div class="field"><label>Strength to damage</label><select id="af-mult">
-          <option value="1">×1 (one-handed / primary)</option>
-          <option value="1.5">×1½ (two-handed / primary natural)</option>
+          <option value="1">×1</option>
+          <option value="1.5">×1½ (two-handed / lone natural attack)</option>
           <option value="0.5">×½ (off-hand / secondary natural)</option>
           <option value="0">none</option></select></div>
         <div class="field"><label>Extra attack bonus</label><input class="tiny" id="af-atkbonus" type="number" value="0"></div>
@@ -823,6 +826,7 @@
         label,
         count: parseInt(m.body.querySelector('#af-count').value, 10) || 1,
         atkAbility: m.body.querySelector('#af-atkab').value,
+        type: m.body.querySelector('#af-type').value,
         dice: m.body.querySelector('#af-dice').value.trim(),
         dmgMult: m.body.querySelector('#af-mult').value,
         atkBonus: parseInt(m.body.querySelector('#af-atkbonus').value, 10) || 0,
