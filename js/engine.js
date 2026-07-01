@@ -1109,6 +1109,12 @@ const PF = (() => {
 
   // full buff library: curated effects (precise) merged with every spell (auto-parsed)
   let _buffLib = null;
+  // drop lazily-built indexes over PFDATA so entries added/removed at runtime
+  // (homebrew) show up without a reload; called by Custom.add/remove
+  function invalidateCaches() {
+    _buffLib = null;
+    _featIndex = null;
+  }
   function buffLibrary() {
     if (_buffLib) return _buffLib;
     const spellByName = new Map((PFDATA.spells || []).map(s => [s.name.toLowerCase(), s]));
@@ -1456,7 +1462,7 @@ const PF = (() => {
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
     getCompSpecies, getFamiliarSpecies,
     CONDITIONS, newPlayState, stackTotal, effective, currentHP, rollDice,
-    buffLibrary, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
+    buffLibrary, invalidateCaches, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
     featPrereqs, checkFeatPrereqs, featParents, casterLevelOf, maxSpellLevel,
     newCompanionPlay, companionAttacks,
   };

@@ -213,7 +213,15 @@ const Custom = (() => {
     try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { return {}; }
   }
   function saveStore(store) {
-    localStorage.setItem(STORE, JSON.stringify(store));
+    try {
+      localStorage.setItem(STORE, JSON.stringify(store));
+    } catch (err) {
+      // quota exceeded / private mode — the entry still works for this session
+      const msg = 'This homebrew entry could not be saved to browser storage' +
+        (/quota/i.test(err.message) ? ' (it\'s full)' : '') +
+        ' — it will be gone after this tab closes.';
+      if (window.UI && window.UI.alert) window.UI.alert(msg, { title: 'Could not save' });
+    }
   }
 
   function dataArray(type) {
@@ -242,6 +250,7 @@ const Custom = (() => {
     saveStore(store);
     const arr = dataArray(type);
     if (arr) arr.push(entry);
+    PF.invalidateCaches();   // so the new entry appears in buff pickers / feat prereqs without a reload
     return entry;
   }
 
@@ -254,6 +263,7 @@ const Custom = (() => {
       const i = arr.findIndex(x => x.custom && x.name === name);
       if (i >= 0) arr.splice(i, 1);
     }
+    PF.invalidateCaches();
   }
 
   const creatable = type => !!SCHEMAS[type];

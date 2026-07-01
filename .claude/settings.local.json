@@ -86,7 +86,13 @@
       "Bash(git commit -m 'Fix companion secondary attacks \\(−5 to hit\\); add no-cache headers *)",
       "Bash(git push *)",
       "Bash(git rev-list *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(node -e ' *)",
+      "Bash(node --check data/bundles.js)",
+      "Bash(node \"C:/Users/zanca/AppData/Local/Temp/claude/C--Users-zanca-Desktop-dnd-characters-Character-Sheets/dd54af0a-dd9e-4f0e-9567-ae460a83ef23/scratchpad/validate.js\")",
+      "Bash(node \"C:/Users/zanca/AppData/Local/Temp/claude/C--Users-zanca-Desktop-dnd-characters-Character-Sheets/dd54af0a-dd9e-4f0e-9567-ae460a83ef23/scratchpad/probe.js\")",
+      "Bash(python \"C:\\\\Users\\\\zanca\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-zanca-Desktop-dnd-characters-Character-Sheets\\\\e6baed41-dd36-40d9-b047-5d4ca55f6996\\\\scratchpad\\\\scan.py\")",
+      "Bash(python \"C:\\\\Users\\\\zanca\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-zanca-Desktop-dnd-characters-Character-Sheets\\\\e6baed41-dd36-40d9-b047-5d4ca55f6996\\\\scratchpad\\\\validate_bundles.py\")"
     ]
   }
 }

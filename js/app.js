@@ -94,22 +94,152 @@
     render();
   });
 
-  // migrate/patch loaded characters with new fields, and coerce malformed shapes
-  // (a bad hand-edited or imported file shouldn't be able to crash the app)
-  function patch(c) {
-    if (!c || typeof c !== 'object') c = {};
-    const fresh = PF.newCharacter('');
-    for (const k of Object.keys(fresh)) {
-      const def = fresh[k];
-      if (c[k] === undefined) { c[k] = def; continue; }
-      // ensure structural fields have the right container type
-      if (Array.isArray(def) && !Array.isArray(c[k])) c[k] = def;
-      else if (def && typeof def === 'object' && !Array.isArray(def) &&
-               (typeof c[k] !== 'object' || c[k] === null || Array.isArray(c[k]))) c[k] = def;
+  // ---- load/import sanitization ----
+  // Every character that enters memory (localStorage, Import JSON, storage
+  // events, save-merge) passes through patch(). Rebuild each known field with
+  // its expected primitive type: several of these are interpolated into
+  // innerHTML as bare numbers (buff change values, counters, gear qty…), so a
+  // shared or hand-edited file must not be able to put markup there — and
+  // string numbers ("12") would silently break arithmetic ("12" + 1 = "121").
+  const toInt = (v, def = 0) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
+  const toNum = (v, def = 0) => { const n = parseFloat(v); return isNaN(n) ? def : n; };
+  const toIntOrNull = v => (v == null || v === '' || isNaN(parseInt(v, 10))) ? null : parseInt(v, 10);
+  const toStr = v => (v == null ? '' : String(v));
+  const word = v => toStr(v).replace(/[^a-zA-Z ]/g, '');   // buff targets & bonus types (changesText renders them unescaped)
+  const strArr = a => (Array.isArray(a) ? a.map(toStr) : []);
+  const objArr = (a, fn) => (Array.isArray(a) ? a.filter(x => x && typeof x === 'object').map(fn) : []);
+  const intMap = o => { const out = {}; if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) out[k] = toInt(v); return out; };
+  const abMap = (o, def) => { const out = {}; for (const ab of PF.ABILITIES) out[ab] = toInt(o && o[ab], def); return out; };
+
+  const sanChange = ch => ({ target: word(ch.target), type: word(ch.type) || 'untyped', value: toNum(ch.value) });
+  function sanBuff(b) {
+    const out = { name: toStr(b.name), active: !!b.active, note: toStr(b.note),
+                  changes: objArr(b.changes, sanChange) };
+    if (b.custom) out.custom = true;
+    if (b.fromSpell) out.fromSpell = true;
+    if (b.scales) out.scales = true;
+    return out;
+  }
+  const sanGear = g => ({ name: toStr(g.name), kind: toStr(g.kind) || 'item', qty: toInt(g.qty, 1),
+    equipped: !!g.equipped, cost: toStr(g.cost), weight: toNum(g.weight), note: toStr(g.note),
+    enh: toInt(g.enh), mw: !!g.mw, special: toStr(g.special), dmgBonus: toStr(g.dmgBonus) });
+  const sanRollLine = l => ({ d20: toInt(l.d20), mod: toInt(l.mod), total: toInt(l.total),
+    dmg: toStr(l.dmg), bonus: toStr(l.bonus) });
+  function sanRoll(r) {
+    const out = { label: toStr(r.label), time: toInt(r.time) };
+    if (r.full) { out.full = true; out.lines = objArr(r.lines, sanRollLine); return out; }
+    if (r.pure) { out.pure = true; out.total = toNum(r.total); out.breakdown = toStr(r.breakdown); return out; }
+    out.d20 = toInt(r.d20); out.mod = toInt(r.mod); out.total = toInt(r.total);
+    if (r.extra) out.extra = toStr(r.extra);
+    return out;
+  }
+  const sanCustomRoll = cr => ({ label: toStr(cr.label), kind: toStr(cr.kind),
+    atkAbility: toStr(cr.atkAbility), ability: toStr(cr.ability), useBab: !!cr.useBab, d20: !!cr.d20,
+    atkBonus: toInt(cr.atkBonus), dmgBonus: toInt(cr.dmgBonus), bonus: toInt(cr.bonus), mod: toInt(cr.mod),
+    dice: toStr(cr.dice), dmgMult: toStr(cr.dmgMult), bonusDice: toStr(cr.bonusDice) });
+  function sanPlay(p) {
+    p = (p && typeof p === 'object') ? p : {};
+    const slotsUsed = {};
+    if (p.slotsUsed && typeof p.slotsUsed === 'object') {
+      for (const [cls, lv] of Object.entries(p.slotsUsed)) slotsUsed[cls] = intMap(lv);
     }
-    if (typeof c.name !== 'string' || !c.name) c.name = 'Unnamed';
-    if (!c.id) c.id = 'pc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    return c;
+    return {
+      hpDamage: toInt(p.hpDamage), hpTemp: toInt(p.hpTemp), nonlethal: toInt(p.nonlethal),
+      mythicUsed: toInt(p.mythicUsed), slotsUsed,
+      buffs: objArr(p.buffs, sanBuff),
+      counters: objArr(p.counters, k => ({ name: toStr(k.name), cur: toInt(k.cur), max: toInt(k.max) })),
+      rolls: objArr(p.rolls, sanRoll).slice(0, 30),
+      customRolls: objArr(p.customRolls, sanCustomRoll),
+    };
+  }
+  // legacy custom attacks are {label, atk, dice} with NO atkAbility key — keep
+  // that key absent so companionAttacks still recognizes the shape
+  const sanCompAttack = ca => (ca.atkAbility === undefined && ca.atk !== undefined)
+    ? { label: toStr(ca.label), atk: toInt(ca.atk), dice: toStr(ca.dice), bonusDice: toStr(ca.bonusDice) }
+    : { label: toStr(ca.label), count: toInt(ca.count, 1), atkAbility: toStr(ca.atkAbility), type: toStr(ca.type),
+        dice: toStr(ca.dice), dmgMult: toStr(ca.dmgMult), atkBonus: toInt(ca.atkBonus), dmgBonus: toInt(ca.dmgBonus),
+        bonusDice: toStr(ca.bonusDice) };
+  function sanCompanion(comp) {
+    const abilityOverride = {};
+    for (const ab of PF.ABILITIES) {
+      const v = toIntOrNull((comp.abilityOverride || {})[ab]);
+      if (v != null) abilityOverride[ab] = v;
+    }
+    const out = {
+      id: toStr(comp.id) || ('cmp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)),
+      type: toStr(comp.type) || 'other',
+      name: toStr(comp.name), species: toStr(comp.species), form: toStr(comp.form) || 'Quadruped',
+      effOverride: toIntOrNull(comp.effOverride), hpOverride: toIntOrNull(comp.hpOverride),
+      leadMod: toInt(comp.leadMod), abilityOverride, miscNatArmor: toInt(comp.miscNatArmor),
+      attacks: toStr(comp.attacks), tricks: toStr(comp.tricks), gear: toStr(comp.gear),
+      notes: toStr(comp.notes), linkedId: toStr(comp.linkedId),
+    };
+    if (comp.play && typeof comp.play === 'object') {
+      const cp = comp.play;
+      out.play = { hpDamage: toInt(cp.hpDamage), atkMisc: toInt(cp.atkMisc), acMisc: toInt(cp.acMisc),
+                   saveMisc: toInt(cp.saveMisc), dmgMisc: toInt(cp.dmgMisc), note: toStr(cp.note),
+                   customAttacks: objArr(cp.customAttacks, sanCompAttack), buffs: objArr(cp.buffs, sanBuff) };
+    }
+    return out;
+  }
+  function sanCombat(cb, fresh) {
+    cb = (cb && typeof cb === 'object') ? cb : {};
+    const out = {};
+    for (const [k, def] of Object.entries(fresh)) {
+      out[k] = typeof def === 'string' ? toStr(cb[k]) : toNum(cb[k], def);
+    }
+    return out;
+  }
+  function sanitize(c) {
+    const fresh = PF.newCharacter('');
+    const money = (c.money && typeof c.money === 'object') ? c.money : {};
+    const mythic = (c.mythic && typeof c.mythic === 'object') ? c.mythic : {};
+    return {
+      id: toStr(c.id) || fresh.id,
+      name: toStr(c.name) || 'Unnamed',
+      player: toStr(c.player), alignment: toStr(c.alignment) || 'N', deity: toStr(c.deity),
+      homeland: toStr(c.homeland), gender: toStr(c.gender), age: toStr(c.age),
+      height: toStr(c.height), weight: toStr(c.weight), hair: toStr(c.hair), eyes: toStr(c.eyes),
+      xp: toInt(c.xp),
+      abilityMethod: toStr(c.abilityMethod) || 'pointbuy',
+      pointBuyBudget: toInt(c.pointBuyBudget) || 20,
+      abilities: abMap(c.abilities, 10),
+      abilityMisc: abMap(c.abilityMisc, 0),
+      levelIncreases: abMap(c.levelIncreases, 0),
+      race: toStr(c.race), flexChoice: toStr(c.flexChoice) || 'str',
+      altTraits: strArr(c.altTraits),
+      levels: objArr(c.levels, l => ({ cls: toStr(l.cls), archetypes: strArr(l.archetypes),
+                                       hp: toIntOrNull(l.hp), fcb: toStr(l.fcb) })),
+      favoredClass: toStr(c.favoredClass),
+      skills: intMap(c.skills), skillMisc: intMap(c.skillMisc),
+      classSkillExtra: strArr(c.classSkillExtra),
+      feats: Array.isArray(c.feats) ? c.feats.map(f => (f && typeof f === 'object')
+        ? { name: toStr(f.name), note: toStr(f.note) } : { name: toStr(f), note: '' }) : [],
+      traits: strArr(c.traits),
+      classAbilities: objArr(c.classAbilities, a => ({ name: toStr(a.name), cls: toStr(a.cls) })),
+      languages: toStr(c.languages),
+      spells: objArr(c.spells, s => ({ name: toStr(s.name), cls: toStr(s.cls), lvl: toInt(s.lvl),
+                                       prepared: toInt(s.prepared), note: toStr(s.note) })),
+      gear: objArr(c.gear, sanGear),
+      companions: objArr(c.companions, sanCompanion),
+      money: { pp: toInt(money.pp), gp: toInt(money.gp), sp: toInt(money.sp), cp: toInt(money.cp) },
+      combat: sanCombat(c.combat, fresh.combat),
+      play: sanPlay(c.play),
+      mythic: { tier: toInt(mythic.tier), path: toStr(mythic.path), abilities: strArr(mythic.abilities) },
+      skillMiscAll: toInt(c.skillMiscAll),
+      hpMode: toStr(c.hpMode) || 'avg',
+      notes: toStr(c.notes), backstory: toStr(c.backstory),
+      created: toInt(c.created) || fresh.created,
+      updated: toInt(c.updated) || fresh.updated,
+    };
+  }
+  // Mutates in place (save() re-maps characters through patch, and open views
+  // hold references to the same objects). Unknown extra keys are left alone —
+  // they're never rendered, and dropping them would break round-tripping files
+  // from other tools.
+  function patch(c) {
+    if (!c || typeof c !== 'object' || Array.isArray(c)) c = {};
+    return Object.assign(c, sanitize(c));
   }
   characters = (Array.isArray(characters) ? characters : []).map(patch);
 
