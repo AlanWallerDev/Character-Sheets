@@ -92,7 +92,11 @@
       "Bash(node \"C:/Users/zanca/AppData/Local/Temp/claude/C--Users-zanca-Desktop-dnd-characters-Character-Sheets/dd54af0a-dd9e-4f0e-9567-ae460a83ef23/scratchpad/validate.js\")",
       "Bash(node \"C:/Users/zanca/AppData/Local/Temp/claude/C--Users-zanca-Desktop-dnd-characters-Character-Sheets/dd54af0a-dd9e-4f0e-9567-ae460a83ef23/scratchpad/probe.js\")",
       "Bash(python \"C:\\\\Users\\\\zanca\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-zanca-Desktop-dnd-characters-Character-Sheets\\\\e6baed41-dd36-40d9-b047-5d4ca55f6996\\\\scratchpad\\\\scan.py\")",
-      "Bash(python \"C:\\\\Users\\\\zanca\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-zanca-Desktop-dnd-characters-Character-Sheets\\\\e6baed41-dd36-40d9-b047-5d4ca55f6996\\\\scratchpad\\\\validate_bundles.py\")"
+      "Bash(python \"C:\\\\Users\\\\zanca\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-zanca-Desktop-dnd-characters-Character-Sheets\\\\e6baed41-dd36-40d9-b047-5d4ca55f6996\\\\scratchpad\\\\validate_bundles.py\")",
+      "Bash(sed -i 's|js/engine.js?v=35|js/engine.js?v=36|; s|js/custom.js?v=3|js/custom.js?v=4|; s|js/pdf.js?v=6|js/pdf.js?v=7|; s|js/sheet.js?v=21|js/sheet.js?v=22|' index.html)",
+      "Bash(git rm *)",
+      "Bash(git commit -m 'Weapon Finesse & thrown-weapon damage; CMD deflection/dodge; encumbrance slows speed; PDF ammo fix; feat auto-parse sign & conditional fixes *)",
+      "Bash(git commit -m 'Untrack __pycache__ and machine-local Claude settings; gitignore them *)"
     ]
   }
 }

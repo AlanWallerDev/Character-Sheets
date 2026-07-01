@@ -13,3 +13,7 @@ foundry-packs.tar.gz
 .DS_Store
 Thumbs.db
 *.log
+__pycache__/
+
+# --- machine-local tool config (per-user permissions etc.) ---
+.claude/settings.local.json
