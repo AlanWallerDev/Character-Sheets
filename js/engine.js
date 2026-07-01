@@ -436,8 +436,10 @@ const PF = (() => {
   function skillPointsBudget(c) {
     const intM = abilityMod(c, 'int');
     let total = 0;
-    const race = getRace(c.race);
-    const human = race && race.traits && race.traits.some(t => /Skilled/i.test(t.name) && /skill rank/i.test(t.body));
+    // +1 rank/level from "Skilled" (human etc.) — but not if an alternate racial
+    // trait replaced it, so check the merged trait list rather than the raw race
+    const rt = racialTraits(c);
+    const human = !!(rt && rt.standard.some(t => !t.replaced && /Skilled/i.test(t.name) && /skill rank/i.test(t.body)));
     c.levels.forEach(l => {
       const cls = getClass(l.cls);
       const base = (cls && cls.ranks) || 2;
@@ -471,6 +473,25 @@ const PF = (() => {
     if (w.prof === 'Firearm') return true;
     return /Ranged|Thrown|Ammunition/i.test((w.group || '') + (w.range || '')) && w.range && w.range !== '—';
   }
+
+  // Weapon Finesse covers light weapons, unarmed strikes, and a few named
+  // weapons (rapier, whip, elven curve blade)
+  function isFinesseWeapon(w) {
+    if (!w) return false;
+    if (/light melee|unarmed/i.test(w.group || '')) return true;
+    return /^(rapier|whip)\b/i.test(w.name || '') || /curve blade/i.test(w.name || '');
+  }
+  // ability behind a melee weapon's to-hit: Dex when the character has Weapon
+  // Finesse, the weapon allows it, and Dex is the better modifier (damage stays Str)
+  function meleeAttackAbility(c, w) {
+    return (isFinesseWeapon(w) && hasFeat(c, 'Weapon Finesse') &&
+            abilityMod(c, 'dex') > abilityMod(c, 'str')) ? 'dex' : 'str';
+  }
+  // dedicated thrown weapons (and slings) sit in the Ranged group but still add
+  // Str to damage; blowguns and firearms don't
+  const isThrownWeapon = w => !!w &&
+    /\b(javelin|dart|chakram|shuriken|sling|bolas|net|throwing)\b/i.test(w.name || '') &&
+    !/blowgun|gun\b|firearm/i.test((w.name || '') + ' ' + (w.group || ''));
 
   // ammunition deals no damage of its own (it modifies a launcher) and is named like ammo —
   // so it shouldn't appear as an attack line; it's tracked as a quantity instead
@@ -579,25 +600,34 @@ const PF = (() => {
     const race = getRace(c.race);
     const size = (race && race.size) || 'Medium';
     const sp = SIZE_SPECIAL[size] || 0;
-    const cmb = t.bab + abilityMod(c, 'str') + sp + (c.combat.miscCMB || 0);
-    const cmd = 10 + t.bab + abilityMod(c, 'str') + abilityMod(c, 'dex') + sp + (c.combat.miscCMD || 0);
+    const cb = c.combat;
+    const cmb = t.bab + abilityMod(c, 'str') + sp + (cb.miscCMB || 0);
+    // deflection and dodge bonuses to AC also apply to CMD (armor/shield/natural don't)
+    const cmd = 10 + t.bab + abilityMod(c, 'str') + abilityMod(c, 'dex') + sp +
+      (cb.deflection || 0) + (cb.dodge || 0) + (cb.miscCMD || 0);
     return { cmb, cmd };
   }
 
   function speed(c) {
     const race = getRace(c.race);
-    let base = (race && race.speed) || 30;
+    const base = (race && race.speed) || 30;
+    let slowed = base;
     // e.g. dwarves: "Slow and Steady" — speed is never modified by armor or encumbrance
     const steady = race && (race.traits || []).some(t => /never modified by armor or encumbrance/i.test(t.body));
     if (!steady) {
       for (const { a } of equippedArmor(c)) {
         if (/medium|heavy/i.test(a.group)) {
-          base = base === 30 ? num(a.spd30) || 20 : (base === 20 ? num(a.spd20) || 15 : base);
+          slowed = base === 30 ? num(a.spd30) || 20 : (base === 20 ? num(a.spd20) || 15 : base);
           break;
         }
       }
+      // a medium/heavy load slows you like medium armor; armor and encumbrance
+      // penalties don't stack — the worse one applies
+      if (gearWeight(c) > carryCapacity(c).light) {
+        slowed = Math.min(slowed, base === 30 ? 20 : base === 20 ? 15 : base);
+      }
     }
-    return base + (c.combat.speedMisc || 0);
+    return slowed + (c.combat.speedMisc || 0);
   }
 
   // ---------- carrying ----------
@@ -974,7 +1004,13 @@ const PF = (() => {
 
   // ---------- spell -> buff effect parsing ----------
   function stripTags(s) {
-    return String(s || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;|&#\d+;/gi, ' ').replace(/\s+/g, ' ').trim();
+    return String(s || '').replace(/<[^>]+>/g, ' ')
+      // dashes must survive as '-' — "&ndash;1 penalty" would otherwise lose its
+      // sign and parse as a +1 bonus (Power Attack, Deadly Aim…)
+      .replace(/&(?:ndash|mdash|minus);|&#8211;|&#8212;|&#8722;/gi, '-')
+      .replace(/[–—−]/g, '-')
+      .replace(/&[a-z]+;|&#\d+;/gi, ' ')
+      .replace(/\s+/g, ' ').trim();
   }
 
   const SPELL_BONUS_TYPES = 'enhancement|morale|luck|competence|sacred|profane|insight|resistance|deflection|dodge|alchemical|circumstance|size|racial|trait|natural armor|armor|shield';
@@ -1013,7 +1049,7 @@ const PF = (() => {
   // scan rules text for "+N [type] bonus/penalty to/on <stat>" patterns.
   // opts.permanent skips obviously-conditional bonuses (while raging, X/day, vs…)
   // so always-on application of traits/abilities doesn't grab situational ones.
-  const COND_RE = /\b(?:while|when(?:ever)?|during|against|versus|vs\.?|once per|per day|\/day|rounds? per|number of rounds|on a charge|to resist|made to|as a swift|as an immediate|in place of|selected|chosen|of your choice|that (?:skill|weapon))\b/i;
+  const COND_RE = /\b(?:while|when(?:ever)?|during|against|versus|vs\.?|once per|per day|\/day|rounds? per|number of rounds|on a charge|to resist|made to|as a swift|as an immediate|in place of|selected|chosen|of your choice|choose to|may take|must succeed|that (?:skill|weapon))\b/i;
   function parseChanges(html, opts) {
     const text = stripTags(html || '');
     if (!text) return [];
@@ -1031,7 +1067,7 @@ const PF = (() => {
       if (isNaN(val)) continue;
       if (/penalty/i.test(m[3]) && val > 0) val = -val;
       const type = m[2] ? m[2].toLowerCase() : 'untyped';
-      const phrase = m[4].split(/\b(?:against|while|until|equal|made to|to resist|for the|in addition|and takes?|and a |and suffers?|but|penalty)\b/i)[0];
+      const phrase = m[4].split(/\b(?:against|while|until|equal|made to|to resist|for the|in addition|and takes?|and a |and suffers?|but|penalty|if you|rather than)\b/i)[0];
       const stackType = /^(natural armor|armor|shield)$/.test(type) ? (type === 'natural armor' ? 'enhancement' : 'untyped') : type;
       for (const tgt of phraseToTargets(phrase, type)) {
         const key = tgt + ':' + val;
@@ -1456,6 +1492,7 @@ const PF = (() => {
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
+    isFinesseWeapon, meleeAttackAbility, isThrownWeapon,
     carryCapacity, gearWeight, casterInfo, spellOnClassList, bonusSlots, spellSlots, spellsKnownRow, spellDC,
     totalGold, num,
     getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,

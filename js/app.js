@@ -1096,9 +1096,9 @@
       const w = PF.getWeapon(g.name);
       const mw = PF.magicWeapon(g);
       const ranged = PF.isRangedWeapon(w);
-      const abM = ranged ? PF.abilityMod(e, 'dex') : PF.abilityMod(e, 'str');
+      const abM = ranged ? PF.abilityMod(e, 'dex') : PF.abilityMod(e, PF.meleeAttackAbility(e, w));
       const atkMod = t.bab + abM + sizeM + mw.atk + (e.combat.miscAttack || 0);
-      const dmgMod = (ranged ? 0 : PF.abilityMod(e, 'str')) + mw.dmg + (e.combat.miscDamage || 0);
+      const dmgMod = (ranged && !PF.isThrownWeapon(w) ? 0 : PF.abilityMod(e, 'str')) + mw.dmg + (e.combat.miscDamage || 0);
       const dice = w && /\d*d\d+/.test(w.dmgM) ? w.dmgM.match(/\d*d\d+/)[0] + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : '') : null;
       const name = PF.gearDisplayName(g);
       const single = rollChip(name, atkMod, dice, mw.dmgBonus);

@@ -184,16 +184,17 @@ const PDF = (() => {
     ], 6);
 
     // ---------------- attacks ----------------
-    const weapons = c.gear.filter(g => g.kind === 'weapon');
+    // ammunition is excluded (as on the sheet/Play tab) — it appears in Gear with its quantity
+    const weapons = c.gear.filter(g => g.kind === 'weapon' && !PF.gearIsAmmo(g));
     if (weapons.length) {
       sectionHeader('Attacks');
       const rows = weapons.map(g => {
         const w = PF.getWeapon(g.name);
         const mw = PF.magicWeapon(g);
         const ranged = PF.isRangedWeapon(w);
-        const abM = ranged ? PF.abilityMod(c, 'dex') : PF.abilityMod(c, 'str');
+        const abM = ranged ? PF.abilityMod(c, 'dex') : PF.abilityMod(c, PF.meleeAttackAbility(c, w));
         const atk = PF.iterAttacks(t.bab).map(b => fmt(b + abM + sizeM + mw.atk + (c.combat.miscAttack || 0))).join('/');
-        const dmgMod = (ranged ? 0 : PF.abilityMod(c, 'str')) + mw.dmg;
+        const dmgMod = (ranged && !PF.isThrownWeapon(w) ? 0 : PF.abilityMod(c, 'str')) + mw.dmg;
         const dmg = (w ? w.dmgM : '—') + (dmgMod ? ' ' + fmt(dmgMod) : '') + (mw.dmgBonus ? ' + ' + mw.dmgBonus : '');
         return [PF.gearDisplayName(g), atk, dmg, w ? w.crit : '', w ? w.dtype : ''];
       });

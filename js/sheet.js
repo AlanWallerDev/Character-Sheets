@@ -77,10 +77,10 @@ const Sheet = (() => {
         const w = PF.getWeapon(g.name);
         const mw = PF.magicWeapon(g);
         const ranged = PF.isRangedWeapon(w);
-        const abM = ranged ? PF.abilityMod(c, 'dex') : PF.abilityMod(c, 'str');
+        const abM = ranged ? PF.abilityMod(c, 'dex') : PF.abilityMod(c, PF.meleeAttackAbility(c, w));
         const sizeM = PF.SIZE_MOD[(race && race.size) || 'Medium'] || 0;
         const atk = PF.iterAttacks(t.bab).map(b => fmt(b + abM + sizeM + mw.atk + (c.combat.miscAttack || 0))).join('/');
-        const dmgMod = (ranged ? 0 : PF.abilityMod(c, 'str')) + mw.dmg;
+        const dmgMod = (ranged && !PF.isThrownWeapon(w) ? 0 : PF.abilityMod(c, 'str')) + mw.dmg;
         const dmgText = (w ? w.dmgM : '—') + (dmgMod ? ' ' + fmt(dmgMod) : '') + (mw.dmgBonus ? ' + ' + mw.dmgBonus : '');
         h += `<tr><td>${ref('gear', g.name, PF.gearDisplayName(g))}</td><td>${atk}</td>
           <td>${esc(dmgText)}</td>
