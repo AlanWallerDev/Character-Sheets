@@ -227,6 +227,13 @@ PFGENDATA.featBundles = [
   { id:'battle-caster', label:'War Mage', roles:['gish','divine'], classes:['Magus','Warpriest','Cleric','Bloodrager','Inquisitor'], weapon:'oneHand',
     favors:{str:1,wis:1,int:1}, minLevel:1, requiresCasting:true,
     feats:['Combat Casting','Power Attack','Weapon Focus','Toughness','Iron Will'] },
+
+  // --- Fallback (NO gates) — the only bundle guaranteed eligible for every
+  // class (occult non-casters are locked out of the requiresCasting bundles);
+  // the pipeline also drains leftover slots from this chain when a rolled
+  // bundle runs dry at high level.
+  { id:'generalist', label:'Seasoned Adventurer', favors:{}, minLevel:1,
+    feats:['Toughness','Improved Initiative','Iron Will','Great Fortitude','Lightning Reflexes','Dodge','Combat Reflexes','Alertness','Athletic'] },
 ];
 
 /* ---------------------------------------------------------------------------
