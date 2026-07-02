@@ -179,73 +179,8 @@
     }
   }
 
-  // ---------- feat bundles ----------
-  // Mirror the Feats tab's allowance math exactly (app.js tabFeats):
-  // ceil(level/2) base + class "Bonus feat" features + racial bonus feat.
-  function featAllowance(c) {
-    let n = Math.max(0, Math.ceil(c.levels.length / 2));
-    for (const grp of PF.classFeatures(c)) for (const f of grp.features)
-      if (/^bonus feat/i.test(f.name)) n += f.levels.length;
-    const race = PF.getRace(c.race);
-    if (race && (race.traits || []).some(t => /bonus feat/i.test(t.name))) n += 1;
-    return n;
-  }
-
-  function bundleEligible(b, picks) {
-    const prof = (G().classProfiles || {})[picks.cls] || {};
-    if ((b.minLevel || 1) > picks.level) return false;
-    if (b.requiresCasting && !PF.casterInfo(picks.cls)) return false;
-    if (!b.classes && !b.roles) return true;              // ungated (generalist)
-    return (b.classes || []).includes(picks.cls) || (b.roles || []).includes(prof.role);
-  }
-
-  function featBundleCandidates(picks, s) {
-    const str = s === undefined ? 0.7 : s;
-    const c = baseCharacter(picks);                       // for final ability mods
-    const out = [];
-    for (const b of (G().featBundles || [])) {
-      if (!bundleEligible(b, picks)) continue;
-      let w = b.id === 'generalist' ? 0.6 : 1;            // themed bundles preferred
-      if ((b.classes || []).includes(picks.cls)) w *= 1.6;
-      for (const [ab, fv] of Object.entries(b.favors || {}))
-        w *= Math.pow(1.15, str * fv * PF.abilityMod(c, ab));
-      out.push({ value: b.id, label: b.label, weight: w });
-    }
-    return out;
-  }
-
-  // Walk a bundle's ordered chain, taking each feat whose prerequisites the
-  // engine confirms (or can't verify — curated chains treat 'unknown' as met;
-  // e.g. "Weapon Focus with chosen weapon" isn't machine-checkable). The
-  // character is extended as we go so later links see earlier ones.
-  function walkChain(c, bundle, slots) {
-    let taken = 0;
-    for (const name of bundle.feats) {
-      if (taken >= slots) break;
-      const feat = PF.getFeat(name);
-      if (!feat || c.feats.some(f => f.name === name)) continue;
-      if (PF.checkFeatPrereqs(c, feat).status === 'unmet') continue;
-      c.feats.push({ name, note: bundle.label });
-      taken++;
-    }
-    return taken;
-  }
-
-  function applyFeats(c, picks) {
-    const all = G().featBundles || [];
-    const byId = id => all.find(b => b.id === id);
-    let slots = featAllowance(c);
-    for (const id of [picks.featBundle, picks.featBundle2, 'generalist']) {
-      if (slots <= 0) break;
-      const b = id && byId(id);
-      if (b) slots -= walkChain(c, b, slots);
-    }
-  }
-
   // ---------- build a real character object from the picks ----------
-  // baseCharacter = identity/levels/abilities only (used for weighting later
-  // reels); buildCharacter layers skills + feats on top. Both are pure.
-  function baseCharacter(picks) {
+  function buildCharacter(picks) {
     const c = PF.newCharacter(picks.race + ' ' + picks.cls);
     const prof = (G().classProfiles || {})[picks.cls] || {};
     const race = (PFDATA.races || []).find(r => r.name === picks.race);
@@ -263,13 +198,7 @@
     c.levels = Array.from({ length: picks.level }, () => ({
       cls: picks.cls, archetypes: [], hp: null, fcb: 'hp',
     }));
-    return c;
-  }
-
-  function buildCharacter(picks) {
-    const c = baseCharacter(picks);
     if (picks.skillTheme) distributeSkills(c, picks.skillTheme);  // needs levels + abilities set
-    if (picks.featBundle) applyFeats(c, picks);
     c.notes = 'Rolled by the Random Character Generator (seed ' + picks.seed + ').';
     return c;
   }
@@ -364,7 +293,7 @@
           ${ABILITIES.map(ab => reelHTML(ab, AB_LABEL[ab], true)).join('')}
         </div>
         <div class="gen-reels">
-          ${reelHTML('skilltheme', 'Skill Focus')}${reelHTML('featbundle', 'Feat Path')}
+          ${reelHTML('skilltheme', 'Skill Focus')}
         </div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
           <button class="primary" id="gen-spin">🎰 Spin</button>
@@ -413,14 +342,11 @@
       const topSkills = Object.entries(c.skills)
         .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, r]) => `${n} ${r}`).join(', ');
       const incr = Math.floor(picks.level / 4);
-      const featList = c.feats.map(f => f.name).join(', ');
-      const bundle = ((G().featBundles || []).find(b => b.id === picks.featBundle) || {});
       main.querySelector('#gen-result').innerHTML =
         `<b>${picks.race} ${picks.cls}</b>, level ${picks.level} — ${alignLabel}<br>
          <span class="small">${finals}</span>
          <span class="small muted">(incl. racial mods${incr ? ' & +' + incr + ' level increases' : ''} — seed ${picks.seed})</span><br>
-         <span class="small">🎯 ${theme.label || ''}${topSkills ? ' — ' + topSkills + '…' : ''}</span><br>
-         <span class="small">⚔ ${bundle.label || ''} (${c.feats.length} feats)${featList ? ' — ' + featList : ''}</span>`;
+         <span class="small">🎯 ${theme.label || ''}${topSkills ? ' — ' + topSkills + '…' : ''}</span>`;
     }
 
     function spin() {
@@ -469,19 +395,6 @@
         const chosen = weightedPick(rng, cands);
         spinReel(reel('skilltheme'), cands, chosen, rng, () => {
           picks.skillTheme = chosen.value;
-          spinFeatBundle();
-        }, { duration: 1.0 });
-      };
-      const spinFeatBundle = () => {
-        status.textContent = 'Rolling feat path…';
-        const cands = featBundleCandidates(picks, syn);
-        const chosen = weightedPick(rng, cands);
-        // silently pre-roll a backup path so high-level builds that drain the
-        // primary chain stay deterministic from picks alone
-        const rest = cands.filter(x => x.value !== chosen.value);
-        picks.featBundle2 = rest.length ? weightedPick(rng, rest).value : null;
-        spinReel(reel('featbundle'), cands, chosen, rng, () => {
-          picks.featBundle = chosen.value;
           finishSpin();
         }, { duration: 1.0 });
       };
@@ -495,6 +408,5 @@
 
   window.PFGEN = { renderView, buildCharacter, legalAlignments, alignmentCandidates,
                    abilityCandidates, levelCandidates, raceCandidates, classCandidates,
-                   skillThemeCandidates, distributeSkills, featBundleCandidates,
-                   featAllowance, mulberry32, weightedPick };
+                   skillThemeCandidates, distributeSkills, mulberry32, weightedPick };
 })();
