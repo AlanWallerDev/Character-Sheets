@@ -124,33 +124,41 @@
       .gen-reel-strip{will-change:transform}
       .gen-reel-strip div{height:${ITEM_H}px;line-height:${ITEM_H}px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}
       .gen-reel.done .gen-reel-window{border-color:var(--accent,#c9a227)}
-      .gen-reel.done .gen-reel-strip div{color:var(--accent,#c9a227);font-weight:bold}
+      .gen-reel.done .gen-reel-strip div.win{color:var(--accent,#c9a227);font-weight:bold}
+      .gen-reel.done .gen-reel-strip div:not(.win){opacity:.45}
     `;
     document.head.appendChild(st);
   }
 
-  // Fill a reel strip with filler rows + the chosen label last, then animate
-  // so the chosen row stops on the center line. Calls done() after landing.
+  // Fill a reel strip with filler rows, the chosen label, then MORE fillers
+  // below it, and animate so the chosen row stops on the center line — the
+  // trailing rows keep the reel looking like it stopped mid-list rather than
+  // running out of options. Calls done() after landing.
   function spinReel(reelEl, candidates, chosen, rng, done) {
     const strip = reelEl.querySelector('.gen-reel-strip');
+    const filler = () => candidates[Math.floor(rng() * candidates.length)].label;
     const rows = [];
-    const fillers = Math.min(22, Math.max(12, candidates.length));
-    for (let i = 0; i < fillers; i++)
-      rows.push(candidates[Math.floor(rng() * candidates.length)].label);
+    const pre = Math.min(22, Math.max(12, candidates.length));
+    for (let i = 0; i < pre; i++) rows.push(filler());
     rows.push(chosen.label);                       // lands on center row
-    rows.push('');                                 // padding below center
-    strip.innerHTML = rows.map(r => `<div>${r}</div>`).join('');
+    for (let i = 0; i < 4; i++) rows.push(filler()); // visible "almosts" below
+    strip.innerHTML = rows.map((r, i) =>
+      `<div${i === pre ? ' class="win"' : ''}>${r}</div>`).join('');
     strip.style.transition = 'none';
     strip.style.transform = 'translateY(0)';
     reelEl.classList.remove('done');
     // force reflow so the transition below actually animates
     void strip.offsetHeight;
-    const target = (rows.length - 2 - 1) * ITEM_H; // chosen row -> middle row
+    const target = (pre - 1) * ITEM_H;             // chosen row -> middle row
     strip.style.transition = 'transform 1.25s cubic-bezier(.15,.85,.25,1)';
     strip.style.transform = 'translateY(-' + target + 'px)';
     let fired = false;
     const finish = () => {
       if (fired) return; fired = true;
+      // snap to the final position — guarantees the winner is centered even
+      // if the transition never ran (throttled tab, reduced-motion browsers)
+      strip.style.transition = 'none';
+      strip.style.transform = 'translateY(-' + target + 'px)';
       reelEl.classList.add('done');
       done();
     };
