@@ -22,7 +22,12 @@ window.PFGENDATA = window.PFGENDATA || {};
  *
  *   roll     : eligible for the class wheel
  *   keys     : ability priority for stat weighting + the auto ability-increases
- *              (first entry is the "key ability"; finesse classes list dex|str)
+ *              (first entry is the "key ability"; finesse classes list dex|str).
+ *              May list 2-4 abilities in priority order — the generator splits
+ *              a FIXED stat budget across them (KEY_SHARES in generator.js),
+ *              so MAD classes get wider-but-flatter spreads, not more total
+ *              points. Give a class a 3rd key only when it genuinely needs
+ *              three stats (Paladin, Monk…), not just "would like" them.
  *   role     : 'martial' | 'arcane' | 'divine' | 'nature' | 'skill' | 'gish'
  *   defense  : preferred armor weight -> feeds gearKits ('heavy'..'none')
  *   weapon   : default weaponPref if no feat bundle overrides it
@@ -37,9 +42,9 @@ PFGENDATA.classProfiles = {
   Cleric:    { roll:true,  keys:['wis','str'],       role:'divine',  defense:'heavy',  weapon:'oneHand',    tags:['healer','support'], list:'Cleric' },
   Druid:     { roll:true,  keys:['wis','con'],       role:'nature',  defense:'medium', weapon:'oneHand',    tags:['wild','support'], list:'Druid' },
   Fighter:   { roll:true,  keys:['str','dex'],       role:'martial', defense:'heavy',  weapon:'twoHanded',  tags:['frontline','versatile'] },
-  Monk:      { roll:true,  keys:['dex','wis'],       role:'martial', defense:'none',   weapon:'unarmed',    tags:['mobile','lawful'] },
-  Paladin:   { roll:true,  keys:['str','cha'],       role:'divine',  defense:'heavy',  weapon:'oneHand',    tags:['frontline','smite'], list:'Paladin' },
-  Ranger:    { roll:true,  keys:['dex','wis'],       role:'martial', defense:'medium', weapon:'ranged',     tags:['wild','skirmish'], list:'Ranger' },
+  Monk:      { roll:true,  keys:['dex','wis','str'], role:'martial', defense:'none',   weapon:'unarmed',    tags:['mobile','lawful'] },
+  Paladin:   { roll:true,  keys:['str','cha','con'], role:'divine',  defense:'heavy',  weapon:'oneHand',    tags:['frontline','smite'], list:'Paladin' },
+  Ranger:    { roll:true,  keys:['dex','wis','str'], role:'martial', defense:'medium', weapon:'ranged',     tags:['wild','skirmish'], list:'Ranger' },
   Rogue:     { roll:true,  keys:['dex','int'],       role:'skill',   defense:'light',  weapon:'finesse',    tags:['skill','sneak'] },
   Sorcerer:  { roll:true,  keys:['cha','con'],       role:'arcane',  defense:'none',   weapon:'none',       tags:['blaster','spont'], list:'Wizard' },
   Wizard:    { roll:true,  keys:['int','dex'],       role:'arcane',  defense:'none',   weapon:'none',       tags:['blaster','control'], list:'Wizard' },
@@ -50,21 +55,21 @@ PFGENDATA.classProfiles = {
   Oracle:       { roll:true, keys:['cha','con'],     role:'divine',  defense:'heavy',  weapon:'oneHand',    tags:['healer','blaster'], list:'Cleric' },
   Summoner:     { roll:true, keys:['cha','con'],     role:'arcane',  defense:'light',  weapon:'none',       tags:['pet','support'], list:'Summoner' },
   Witch:        { roll:true, keys:['int','con'],     role:'arcane',  defense:'none',   weapon:'none',       tags:['control','hex'], list:'Witch' },
-  Magus:        { roll:true, keys:['int','str'],     role:'gish',    defense:'medium', weapon:'oneHand',    tags:['gish','blaster'], list:'Magus' },
+  Magus:        { roll:true, keys:['int','str','con'], role:'gish',  defense:'medium', weapon:'oneHand',    tags:['gish','blaster'], list:'Magus' },
   Ninja:        { roll:true, keys:['dex','cha'],     role:'skill',   defense:'light',  weapon:'finesse',    tags:['skill','sneak'] },
   Samurai:      { roll:true, keys:['str','dex'],     role:'martial', defense:'heavy',  weapon:'mounted',    tags:['mounted','frontline'] },
   Gunslinger:   { roll:true, keys:['dex','wis'],     role:'martial', defense:'light',  weapon:'ranged',     tags:['ranged','grit'] },
   // --- Hybrid (ACG) ---
   Arcanist:     { roll:true, keys:['int','con'],     role:'arcane',  defense:'none',   weapon:'none',       tags:['blaster','control'], list:'Wizard' },
-  Bloodrager:   { roll:true, keys:['str','cha'],     role:'gish',    defense:'medium', weapon:'twoHanded',  tags:['rage','frontline'], list:'Bloodrager' },
-  Brawler:      { roll:true, keys:['str','dex'],     role:'martial', defense:'light',  weapon:'unarmed',    tags:['unarmed','frontline'] },
+  Bloodrager:   { roll:true, keys:['str','con','cha'], role:'gish',  defense:'medium', weapon:'twoHanded',  tags:['rage','frontline'], list:'Bloodrager' },
+  Brawler:      { roll:true, keys:['str','dex','con'], role:'martial', defense:'light', weapon:'unarmed',   tags:['unarmed','frontline'] },
   Hunter:       { roll:true, keys:['wis','dex'],     role:'nature',  defense:'medium', weapon:'ranged',     tags:['pet','wild'], list:'Druid' },
   Investigator: { roll:true, keys:['int','dex'],     role:'skill',   defense:'light',  weapon:'finesse',    tags:['skill','face'], list:'Alchemist' },
   Shaman:       { roll:true, keys:['wis','con'],     role:'divine',  defense:'none',   weapon:'none',       tags:['hex','support'], list:'Shaman' },
   Skald:        { roll:true, keys:['cha','str'],     role:'gish',    defense:'medium', weapon:'twoHanded',  tags:['rage','support'], list:'Bard' },
   Slayer:       { roll:true, keys:['dex','str'],     role:'martial', defense:'medium', weapon:'twoWeapon',  tags:['skill','sneak'] },
   Swashbuckler: { roll:true, keys:['dex','cha'],     role:'martial', defense:'light',  weapon:'finesse',    tags:['finesse','panache'] },
-  Warpriest:    { roll:true, keys:['wis','str'],     role:'divine',  defense:'heavy',  weapon:'twoHanded',  tags:['frontline','healer'], list:'Cleric' },
+  Warpriest:    { roll:true, keys:['wis','str','con'], role:'divine', defense:'heavy',  weapon:'twoHanded', tags:['frontline','healer'], list:'Cleric' },
   // --- Occult / Unchained (rollable but lower default weight via rarity) ---
   Kineticist:   { roll:true, keys:['con','dex'],     role:'arcane',  defense:'light',  weapon:'none',       tags:['blaster'] },
   Mesmerist:    { roll:true, keys:['cha','dex'],     role:'arcane',  defense:'light',  weapon:'finesse',    tags:['face','control'] },
@@ -73,10 +78,10 @@ PFGENDATA.classProfiles = {
   Spiritualist: { roll:true, keys:['wis','con'],     role:'divine',  defense:'light',  weapon:'oneHand',    tags:['pet','support'] },
   Medium:       { roll:true, keys:['cha','wis'],     role:'divine',  defense:'medium', weapon:'oneHand',    tags:['support'] },
   Vigilante:    { roll:true, keys:['dex','cha'],     role:'skill',   defense:'light',  weapon:'finesse',    tags:['skill','face'] },
-  Shifter:      { roll:true, keys:['wis','dex'],     role:'nature',  defense:'light',  weapon:'natural',    tags:['wild','natural'] },
+  Shifter:      { roll:true, keys:['wis','dex','str'], role:'nature', defense:'light',  weapon:'natural',   tags:['wild','natural'] },
   // Unchained dupes — off by default to avoid double-flavor rolls
   'Barbarian (Unchained)': { roll:false, keys:['str','con'], role:'martial', defense:'medium', weapon:'twoHanded', tags:['rage'] },
-  'Monk (Unchained)':      { roll:false, keys:['dex','wis'], role:'martial', defense:'none',   weapon:'unarmed',   tags:['mobile'] },
+  'Monk (Unchained)':      { roll:false, keys:['dex','wis','str'], role:'martial', defense:'none', weapon:'unarmed', tags:['mobile'] },
   'Rogue (Unchained)':     { roll:false, keys:['dex','int'], role:'skill',   defense:'light',  weapon:'finesse',   tags:['skill'] },
   'Summoner (Unchained)':  { roll:false, keys:['cha','con'], role:'arcane',  defense:'light',  weapon:'none',      tags:['pet'] },
 };

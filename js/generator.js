@@ -106,13 +106,20 @@
   }
 
   // Ability reels: 7-19, a bell curve whose CENTER slides with the synergy
-  // strength s (0..1). Primary key ability drifts toward 16.5, secondary
-  // toward 14.5, everything else sags toward 10.5; at s=0 all six are the
-  // same neutral bell around 12 (pure chaos).
+  // strength s (0..1). Each class gets the same fixed surplus budget (+10
+  // points over the 10.5 dump baseline) SPLIT across its key abilities, so
+  // MAD classes (Paladin: str/cha/con) spread the budget wide and flat while
+  // SAD ones (Wizard: int/dex) stack it tall — expected stat TOTALS stay equal
+  // for every class (~73.8 at s=1) regardless of key count. At s=0 all six
+  // roll the same neutral bell around 12 (pure chaos).
+  const KEY_SHARES = { 1: [1], 2: [.6, .4], 3: [.45, .33, .22], 4: [.38, .28, .2, .14] };
+  const KEY_SURPLUS = 10;
   function abilityCandidates(ab, clsName, s) {
     const prof = (G().classProfiles || {})[clsName] || {};
     const keys = prof.keys || [];
-    const target = ab === keys[0] ? 16.5 : ab === keys[1] ? 14.5 : 10.5;
+    const shares = KEY_SHARES[keys.length] || KEY_SHARES[2];
+    const ki = keys.indexOf(ab);
+    const target = ki >= 0 ? 10.5 + KEY_SURPLUS * shares[ki] : 10.5;
     const center = 12 + (target - 12) * (s === undefined ? 0.7 : s);
     const out = [];
     for (let v = 7; v <= 19; v++) {
