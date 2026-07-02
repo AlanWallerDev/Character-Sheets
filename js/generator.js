@@ -181,7 +181,6 @@
         border-radius:50%;background:#f4df9a;border:2px solid #1a1410;box-shadow:0 0 3px rgba(0,0,0,.6)}
       .gen-slider input::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
         background:#f4df9a;border:2px solid #1a1410;box-shadow:0 0 3px rgba(0,0,0,.6)}
-      .gen-slider input::-moz-range-progress{background:var(--accent,#c9a227);height:6px;border-radius:3px}
     `;
     document.head.appendChild(st);
   }
@@ -260,14 +259,18 @@
     const spinBtn = main.querySelector('#gen-spin');
     let picks = null;
 
-    // paint the slider's filled portion up to the actual value (the native
-    // track only fills to the thumb's center, leaving a misleading sliver of
-    // empty track at max) — WebKit needs this; Firefox uses ::-moz-range-progress
+    // paint the slider's filled portion so its edge sits exactly at the THUMB
+    // CENTER: the thumb travels [thumb/2 .. width-thumb/2], not the full track,
+    // so a plain value% gradient drifts away from the circle mid-range. Pinning
+    // the boundary to the thumb's real position keeps bar and circle glued; at
+    // the extremes the opaque circle hides the residual sliver on its far side.
     const synEl = main.querySelector('#gen-syn');
+    const THUMB = 18;                                   // 14px + 2px border each side
     const paintSlider = () => {
-      const p = synEl.value;
+      const w = synEl.clientWidth || 140;
+      const px = THUMB / 2 + (synEl.value / 100) * (w - THUMB);
       synEl.style.background =
-        `linear-gradient(90deg, var(--accent,#c9a227) ${p}%, rgba(255,255,255,.15) ${p}%)`;
+        `linear-gradient(90deg, var(--accent,#c9a227) ${px}px, rgba(255,255,255,.15) ${px}px)`;
     };
     synEl.addEventListener('input', paintSlider);
     paintSlider();
