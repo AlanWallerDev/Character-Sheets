@@ -175,7 +175,13 @@
       .gen-reel.done .gen-reel-strip div.win{color:var(--accent,#c9a227);font-weight:bold}
       .gen-reel.done .gen-reel-strip div:not(.win){opacity:.45}
       .gen-slider{display:flex;align-items:center;gap:8px;font-size:.9em;color:var(--muted,#999)}
-      .gen-slider input{width:140px}
+      .gen-slider input{-webkit-appearance:none;appearance:none;width:140px;height:6px;border-radius:3px;
+        background:rgba(255,255,255,.15);outline:none;cursor:pointer}
+      .gen-slider input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;
+        border-radius:50%;background:#f4df9a;border:2px solid #1a1410;box-shadow:0 0 3px rgba(0,0,0,.6)}
+      .gen-slider input::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+        background:#f4df9a;border:2px solid #1a1410;box-shadow:0 0 3px rgba(0,0,0,.6)}
+      .gen-slider input::-moz-range-progress{background:var(--accent,#c9a227);height:6px;border-radius:3px}
     `;
     document.head.appendChild(st);
   }
@@ -253,6 +259,18 @@
     const saveBtn = main.querySelector('#gen-save');
     const spinBtn = main.querySelector('#gen-spin');
     let picks = null;
+
+    // paint the slider's filled portion up to the actual value (the native
+    // track only fills to the thumb's center, leaving a misleading sliver of
+    // empty track at max) — WebKit needs this; Firefox uses ::-moz-range-progress
+    const synEl = main.querySelector('#gen-syn');
+    const paintSlider = () => {
+      const p = synEl.value;
+      synEl.style.background =
+        `linear-gradient(90deg, var(--accent,#c9a227) ${p}%, rgba(255,255,255,.15) ${p}%)`;
+    };
+    synEl.addEventListener('input', paintSlider);
+    paintSlider();
 
     function finishSpin() {
       status.textContent = '';
