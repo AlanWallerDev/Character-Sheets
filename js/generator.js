@@ -1,10 +1,11 @@
 /* ============================================================================
  * js/generator.js — Random Character Generator (slot-machine reels)
  * ----------------------------------------------------------------------------
- * Phase 0: Level / Race / Class reels -> legal single-class character ->
- * Save to Vault. Weights come from PFGENDATA (data/bundles.js); legality and
- * character math come from the engine (PF). Later phases add ability reels,
- * archetypes, skill themes, feat/spell bundles, gear (see design memory).
+ * Phase 1: Level / Race / Class / Alignment / 6 Ability reels -> legal
+ * single-class character -> Save to Vault. Weights come from PFGENDATA
+ * (data/bundles.js); legality and character math come from the engine (PF).
+ * A chaos<->synergy slider scales how strongly earlier picks bias later reels.
+ * Later phases: archetypes, skill themes, feat/spell bundles, gear, multiclass.
  *
  * Contract with app.js: PFGEN.renderView(container, { onSave, onCancel }).
  * The view manages its own DOM during spins (no app re-renders mid-animation);
@@ -13,6 +14,13 @@
 (function () {
   'use strict';
   const G = () => window.PFGENDATA || {};
+  const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const AB_LABEL = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
+  const ALIGNS = [
+    { code: 'LG', label: 'Lawful Good' },   { code: 'NG', label: 'Neutral Good' }, { code: 'CG', label: 'Chaotic Good' },
+    { code: 'LN', label: 'Lawful Neutral' },{ code: 'N',  label: 'Neutral' },      { code: 'CN', label: 'Chaotic Neutral' },
+    { code: 'LE', label: 'Lawful Evil' },   { code: 'NE', label: 'Neutral Evil' }, { code: 'CE', label: 'Chaotic Evil' },
+  ];
 
   // ---------- seedable RNG (Mulberry32) — lets a build be reproduced later ----------
   function mulberry32(seed) {
@@ -77,15 +85,41 @@
     return out;
   }
 
-  // Class alignment restrictions (free text in class data) -> a legal alignment.
-  function legalAlignment(clsName) {
+  // Class alignment restrictions (free text in class data) -> the legal set.
+  function legalAlignments(clsName) {
     const k = (PFDATA.classes || []).find(x => x.name === clsName);
     const t = ((k && k.alignment) || '').toLowerCase();
-    if (/lawful good\b/.test(t) && !/any/.test(t)) return 'LG';   // Paladin
-    if (/any nonlawful/.test(t)) return 'CN';                     // Barbarian…
-    if (/any lawful/.test(t)) return 'LN';                        // Monk…
-    if (/any neutral/.test(t)) return 'N';                        // Druid…
-    return 'N';                                                   // always legal
+    let ok = ALIGNS.map(a => a.code);
+    if (/lawful good\b/.test(t) && !/any/.test(t)) ok = ['LG'];            // Paladin
+    else if (/any nonlawful/.test(t)) ok = ok.filter(c => c[0] !== 'L');   // Barbarian…
+    else if (/any lawful/.test(t)) ok = ok.filter(c => c[0] === 'L');      // Monk…
+    else if (/any neutral/.test(t)) ok = ok.filter(c => c.includes('N'));  // Druid…
+    return ok;                              // "within one step of deity" etc. -> all 9
+  }
+
+  function alignmentCandidates(picks) {
+    const ok = legalAlignments(picks.cls);
+    return ALIGNS.filter(a => ok.includes(a.code)).map(a => ({
+      value: a.code, label: a.label,
+      weight: a.code.endsWith('E') ? 0.35 : 1,   // evil PCs are rare, not impossible
+    }));
+  }
+
+  // Ability reels: 7-19, a bell curve whose CENTER slides with the synergy
+  // strength s (0..1). Primary key ability drifts toward 16.5, secondary
+  // toward 14.5, everything else sags toward 10.5; at s=0 all six are the
+  // same neutral bell around 12 (pure chaos).
+  function abilityCandidates(ab, clsName, s) {
+    const prof = (G().classProfiles || {})[clsName] || {};
+    const keys = prof.keys || [];
+    const target = ab === keys[0] ? 16.5 : ab === keys[1] ? 14.5 : 10.5;
+    const center = 12 + (target - 12) * (s === undefined ? 0.7 : s);
+    const out = [];
+    for (let v = 7; v <= 19; v++) {
+      const d = v - center;
+      out.push({ value: v, label: String(v), weight: Math.exp(-(d * d) / (2 * 2.8 * 2.8)) });
+    }
+    return out;
   }
 
   // ---------- build a real character object from the picks ----------
@@ -93,9 +127,15 @@
     const c = PF.newCharacter(picks.race + ' ' + picks.cls);
     const prof = (G().classProfiles || {})[picks.cls] || {};
     const race = (PFDATA.races || []).find(r => r.name === picks.race);
+    const key = (prof.keys || ['str'])[0];
     c.race = picks.race;
-    if (race && race.flex) c.flexChoice = (prof.keys || ['str'])[0];
-    c.alignment = legalAlignment(picks.cls);
+    if (race && race.flex) c.flexChoice = key;
+    c.alignment = picks.alignment || legalAlignments(picks.cls)[0] || 'N';
+    if (picks.abilities) {
+      c.abilityMethod = 'manual';           // rolled 7-19 isn't a point-buy spread
+      for (const ab of ABILITIES) c.abilities[ab] = picks.abilities[ab] || 10;
+    }
+    c.levelIncreases[key] = Math.floor(picks.level / 4);  // L4/8/12/16/20 -> key ability
     c.favoredClass = picks.cls;
     c.hpMode = 'avg';
     c.levels = Array.from({ length: picks.level }, () => ({
@@ -116,6 +156,7 @@
     st.textContent = `
       .gen-reels{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0}
       .gen-reel{min-width:170px;flex:1}
+      .gen-reel-sm{min-width:86px;flex:0 1 96px}
       .gen-reel-label{font-size:.85em;color:var(--muted,#999);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em}
       .gen-reel-window{height:${ITEM_H * VISIBLE}px;overflow:hidden;border:1px solid var(--border,#444);border-radius:8px;position:relative;background:rgba(0,0,0,.25)}
       .gen-reel-window::before,.gen-reel-window::after{content:'';position:absolute;left:0;right:0;height:${ITEM_H}px;pointer-events:none;z-index:1}
@@ -126,6 +167,8 @@
       .gen-reel.done .gen-reel-window{border-color:var(--accent,#c9a227)}
       .gen-reel.done .gen-reel-strip div.win{color:var(--accent,#c9a227);font-weight:bold}
       .gen-reel.done .gen-reel-strip div:not(.win){opacity:.45}
+      .gen-slider{display:flex;align-items:center;gap:8px;font-size:.9em;color:var(--muted,#999)}
+      .gen-slider input{width:140px}
     `;
     document.head.appendChild(st);
   }
@@ -134,7 +177,8 @@
   // below it, and animate so the chosen row stops on the center line — the
   // trailing rows keep the reel looking like it stopped mid-list rather than
   // running out of options. Calls done() after landing.
-  function spinReel(reelEl, candidates, chosen, rng, done) {
+  function spinReel(reelEl, candidates, chosen, rng, done, opts) {
+    const dur = (opts && opts.duration) || 1.25;
     const strip = reelEl.querySelector('.gen-reel-strip');
     const filler = () => candidates[Math.floor(rng() * candidates.length)].label;
     const rows = [];
@@ -150,7 +194,7 @@
     // force reflow so the transition below actually animates
     void strip.offsetHeight;
     const target = (pre - 1) * ITEM_H;             // chosen row -> middle row
-    strip.style.transition = 'transform 1.25s cubic-bezier(.15,.85,.25,1)';
+    strip.style.transition = 'transform ' + dur + 's cubic-bezier(.15,.85,.25,1)';
     strip.style.transform = 'translateY(-' + target + 'px)';
     let fired = false;
     const finish = () => {
@@ -163,28 +207,35 @@
       done();
     };
     strip.addEventListener('transitionend', finish, { once: true });
-    setTimeout(finish, 1500);                      // safety net
+    setTimeout(finish, dur * 1000 + 300);          // safety net
   }
 
   // ---------- the view ----------
   function renderView(main, api) {
     injectCss();
+    const reelHTML = (id, label, small) => `
+      <div class="gen-reel${small ? ' gen-reel-sm' : ''}" data-reel="${id}">
+        <div class="gen-reel-label">${label}</div>
+        <div class="gen-reel-window"><div class="gen-reel-strip"><div></div><div style="color:var(--muted,#888)">—</div><div></div></div></div>
+      </div>`;
     main.innerHTML = `<h2>🎲 Random Character</h2>
       <div class="panel">
         <p class="small muted">Spin the reels — each result weights the next
-        (your race nudges your class, and later phases will chain abilities,
-        feats and spells the same way). Everything rolled is rules-legal.</p>
+        (your race nudges your class, your class shapes your ability scores).
+        Everything rolled is rules-legal.</p>
         <div class="gen-reels">
-          ${['Level', 'Race', 'Class'].map(l => `
-            <div class="gen-reel" data-reel="${l.toLowerCase()}">
-              <div class="gen-reel-label">${l}</div>
-              <div class="gen-reel-window"><div class="gen-reel-strip"><div></div><div style="color:var(--muted,#888)">—</div><div></div></div></div>
-            </div>`).join('')}
+          ${reelHTML('level', 'Level')}${reelHTML('race', 'Race')}${reelHTML('class', 'Class')}${reelHTML('alignment', 'Alignment')}
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="gen-reels">
+          ${ABILITIES.map(ab => reelHTML(ab, AB_LABEL[ab], true)).join('')}
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
           <button class="primary" id="gen-spin">🎰 Spin</button>
           <button id="gen-save" style="display:none">💾 Save to Vault</button>
           <button id="gen-cancel">← Back</button>
+          <span class="gen-slider">🎲 Chaos
+            <input type="range" id="gen-syn" min="0" max="100" value="70" title="How strongly your class steers your ability scores">
+          ⚙ Synergy</span>
           <span class="small muted" id="gen-status"></span>
         </div>
         <div id="gen-result" style="margin-top:12px"></div>
@@ -196,40 +247,63 @@
     const spinBtn = main.querySelector('#gen-spin');
     let picks = null;
 
+    function finishSpin() {
+      status.textContent = '';
+      spinBtn.disabled = false;
+      spinBtn.textContent = '🎰 Spin Again';
+      saveBtn.style.display = '';
+      const c = buildCharacter(picks);           // preview copy for final math
+      const finals = ABILITIES.map(ab =>
+        `${AB_LABEL[ab]} <b>${PF.abilityScore(c, ab)}</b>`).join(' · ');
+      const alignLabel = (ALIGNS.find(a => a.code === picks.alignment) || {}).label || picks.alignment;
+      const incr = Math.floor(picks.level / 4);
+      main.querySelector('#gen-result').innerHTML =
+        `<b>${picks.race} ${picks.cls}</b>, level ${picks.level} — ${alignLabel}<br>
+         <span class="small">${finals}</span>
+         <span class="small muted">(incl. racial mods${incr ? ' & +' + incr + ' level increases' : ''} — seed ${picks.seed})</span>`;
+    }
+
     function spin() {
+      const syn = parseInt(main.querySelector('#gen-syn').value, 10) / 100;
       const seed = (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
       const rng = mulberry32(seed);
       picks = { seed };
       spinBtn.disabled = true;
       saveBtn.style.display = 'none';
       main.querySelector('#gen-result').innerHTML = '';
-      status.textContent = 'Rolling level…';
 
-      const lvlCands = levelCandidates();
-      const lvl = weightedPick(rng, lvlCands);
-      spinReel(reel('level'), lvlCands, lvl, rng, () => {
-        picks.level = lvl.value;
-        status.textContent = 'Rolling race…';
-        const raceCands = raceCandidates();
-        const race = weightedPick(rng, raceCands);
-        spinReel(reel('race'), raceCands, race, rng, () => {
-          picks.race = race.value;
-          status.textContent = 'Rolling class…';
-          const clsCands = classCandidates(picks);
-          const cls = weightedPick(rng, clsCands);
-          spinReel(reel('class'), clsCands, cls, rng, () => {
-            picks.cls = cls.value;
-            status.textContent = '';
-            spinBtn.disabled = false;
-            spinBtn.textContent = '🎰 Spin Again';
-            saveBtn.style.display = '';
-            main.querySelector('#gen-result').innerHTML =
-              `<b>${picks.race} ${picks.cls}</b>, level ${picks.level}
-               <span class="small muted">(alignment ${legalAlignment(picks.cls)},
-               seed ${picks.seed})</span>`;
-          });
+      // dependent reels spin in sequence…
+      const seq = [
+        { id: 'level',     label: 'level',     cands: () => levelCandidates(),        set: v => picks.level = v },
+        { id: 'race',      label: 'race',      cands: () => raceCandidates(),         set: v => picks.race = v },
+        { id: 'class',     label: 'class',     cands: () => classCandidates(picks),   set: v => picks.cls = v },
+        { id: 'alignment', label: 'alignment', cands: () => alignmentCandidates(picks), set: v => picks.alignment = v },
+      ];
+      let i = 0;
+      const next = () => {
+        if (i < seq.length) {
+          const st = seq[i++];
+          status.textContent = 'Rolling ' + st.label + '…';
+          const cands = st.cands();
+          const chosen = weightedPick(rng, cands);
+          spinReel(reel(st.id), cands, chosen, rng, () => { st.set(chosen.value); next(); });
+        } else spinAbilities();
+      };
+      // …the six ability reels only depend on the class, so they run together
+      const spinAbilities = () => {
+        status.textContent = 'Rolling abilities…';
+        picks.abilities = {};
+        let landed = 0;
+        ABILITIES.forEach((ab, idx) => {
+          const cands = abilityCandidates(ab, picks.cls, syn);
+          const chosen = weightedPick(rng, cands);
+          setTimeout(() => spinReel(reel(ab), cands, chosen, rng, () => {
+            picks.abilities[ab] = chosen.value;
+            if (++landed === ABILITIES.length) finishSpin();
+          }, { duration: 0.85 }), idx * 140);
         });
-      });
+      };
+      next();
     }
 
     spinBtn.addEventListener('click', spin);
@@ -237,6 +311,7 @@
     main.querySelector('#gen-cancel').addEventListener('click', api.onCancel);
   }
 
-  window.PFGEN = { renderView, buildCharacter, legalAlignment,
-                   levelCandidates, raceCandidates, classCandidates, mulberry32, weightedPick };
+  window.PFGEN = { renderView, buildCharacter, legalAlignments, alignmentCandidates,
+                   abilityCandidates, levelCandidates, raceCandidates, classCandidates,
+                   mulberry32, weightedPick };
 })();
