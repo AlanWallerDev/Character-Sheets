@@ -320,6 +320,7 @@
       if (state.view === 'roster') renderRoster(main);
       else if (state.view === 'library') Library.render(main, {});
       else if (state.view === 'credits') renderCredits(main);
+      else if (state.view === 'generator') renderGenerator(main);
       else if (state.view === 'sheet' && c) renderSheet(main, c);
       else if (state.view === 'builder' && c) renderBuilder(main, c);
       else renderRoster(main);
@@ -366,6 +367,18 @@
     }
   }
 
+  // ---------------- random character generator ----------------
+  function renderGenerator(main) {
+    PFGEN.renderView(main, {
+      onSave: c => {
+        characters.push(c); save();
+        state.charId = c.id; state.view = 'builder'; state.builderTab = 'profile';
+        render();
+      },
+      onCancel: () => { state.view = 'roster'; render(); },
+    });
+  }
+
   // ---------------- roster ----------------
   function renderRoster(main) {
     const showBackupNote = !loadUiPrefs().seenBackupNote && characters.length;
@@ -378,8 +391,9 @@
           on a character to save a backup file, and <b>Import JSON</b> to restore it anywhere.</div>
         <button class="small" id="backup-dismiss">Got it</button>
       </div>` : ''}
-      <div class="no-print" style="display:flex;gap:8px">
+      <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="primary" id="new-char">+ New Character</button>
+        <button id="gen-char">🎲 Random Character</button>
         <button id="import-char">Import JSON</button>
         <input type="file" id="import-file" accept=".json" style="display:none">
       </div>
@@ -424,6 +438,7 @@
       state.charId = c.id; state.view = 'builder'; state.builderTab = 'profile';
       render();
     });
+    $('#gen-char').addEventListener('click', () => { state.view = 'generator'; render(); });
     $('#import-char').addEventListener('click', () => $('#import-file').click());
     $('#import-file').addEventListener('change', e => {
       const f = e.target.files[0];
