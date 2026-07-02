@@ -141,15 +141,18 @@ PFGENDATA.multiclass = { minLevel: 4, chance: 0.18, maxClasses: 2 };
  * skills first per RAW), then spills to remaining class skills. `fitRoles`
  * weights which themes are likely for the rolled class.
  * ------------------------------------------------------------------------- */
+/* Knowledge/Perform/Craft/Profession must be named with their parenthetical
+ * subskill ("Knowledge (arcana)") — the Skills tab only renders those rows,
+ * never the bare base skill. */
 PFGENDATA.skillThemes = [
-  { id:'face',       label:'Silver Tongue',  skills:['Diplomacy','Bluff','Sense Motive','Intimidate','Perform'],                    fitRoles:['arcane','divine','skill'] },
-  { id:'scout',      label:'Pathfinder',     skills:['Perception','Stealth','Survival','Acrobatics','Climb'],                       fitRoles:['martial','skill','nature'] },
-  { id:'infiltrator',label:'Shadow & Lock',  skills:['Stealth','Disable Device','Perception','Sleight of Hand','Escape Artist'],    fitRoles:['skill'] },
-  { id:'loremaster', label:'Loremaster',     skills:['Knowledge','Spellcraft','Linguistics','Appraise','Use Magic Device'],         fitRoles:['arcane','divine'] },
-  { id:'wilderness', label:'Wild Warden',    skills:['Survival','Handle Animal','Ride','Knowledge','Climb','Swim'],                  fitRoles:['nature','martial'] },
-  { id:'athlete',    label:'Iron Body',      skills:['Climb','Swim','Acrobatics','Intimidate','Perception'],                        fitRoles:['martial'] },
-  { id:'mystic',     label:'Arcane Savant',  skills:['Spellcraft','Knowledge','Use Magic Device','Fly','Perception'],               fitRoles:['arcane','gish'] },
-  { id:'healer',     label:'Mercy & Mend',   skills:['Heal','Sense Motive','Diplomacy','Knowledge','Spellcraft'],                   fitRoles:['divine'] },
+  { id:'face',       label:'Silver Tongue',  skills:['Diplomacy','Bluff','Sense Motive','Intimidate','Perform (oratory)'],                       fitRoles:['arcane','divine','skill'] },
+  { id:'scout',      label:'Pathfinder',     skills:['Perception','Stealth','Survival','Acrobatics','Climb'],                                    fitRoles:['martial','skill','nature'] },
+  { id:'infiltrator',label:'Shadow & Lock',  skills:['Stealth','Disable Device','Perception','Sleight of Hand','Escape Artist'],                 fitRoles:['skill'] },
+  { id:'loremaster', label:'Loremaster',     skills:['Knowledge (arcana)','Knowledge (history)','Spellcraft','Linguistics','Appraise'],          fitRoles:['arcane','divine'] },
+  { id:'wilderness', label:'Wild Warden',    skills:['Survival','Handle Animal','Ride','Knowledge (nature)','Climb','Swim'],                     fitRoles:['nature','martial'] },
+  { id:'athlete',    label:'Iron Body',      skills:['Climb','Swim','Acrobatics','Intimidate','Perception'],                                     fitRoles:['martial'] },
+  { id:'mystic',     label:'Arcane Savant',  skills:['Spellcraft','Knowledge (arcana)','Use Magic Device','Knowledge (planes)','Fly'],           fitRoles:['arcane','gish'] },
+  { id:'healer',     label:'Mercy & Mend',   skills:['Heal','Sense Motive','Diplomacy','Knowledge (religion)','Spellcraft'],                     fitRoles:['divine'] },
 ];
 
 /* ---------------------------------------------------------------------------

@@ -129,6 +129,43 @@
     return out;
   }
 
+  // Skill-focus themes: every theme is always available; ones that fit the
+  // class's role get weighted up with the synergy slider.
+  function skillThemeCandidates(picks, s) {
+    const prof = (G().classProfiles || {})[picks.cls] || {};
+    const str = s === undefined ? 0.7 : s;
+    return (G().skillThemes || []).map(t => ({
+      value: t.id, label: t.label,
+      weight: (t.fitRoles || []).includes(prof.role) ? 1 + 2 * str : 1,
+    }));
+  }
+
+  // Spend the engine's exact budget (PF.skillPointsBudget) down the theme's
+  // priority list — class skills first (the +3 makes them the better buy),
+  // capped at level ranks each — then spill into common class skills.
+  const SPILL_SKILLS = ['Perception', 'Stealth', 'Acrobatics', 'Diplomacy', 'Sense Motive',
+    'Survival', 'Intimidate', 'Climb', 'Swim', 'Bluff', 'Ride', 'Heal', 'Spellcraft',
+    'Use Magic Device', 'Disable Device', 'Escape Artist', 'Sleight of Hand',
+    'Handle Animal', 'Knowledge (local)', 'Appraise', 'Linguistics', 'Fly', 'Disguise'];
+  function distributeSkills(c, themeId) {
+    const theme = (G().skillThemes || []).find(t => t.id === themeId);
+    if (!theme) return;
+    let budget = PF.skillPointsBudget(c);
+    const cap = c.levels.length;
+    const seen = new Set(), ordered = [];
+    const push = n => { if (!seen.has(n)) { seen.add(n); ordered.push(n); } };
+    for (const n of theme.skills) if (PF.isClassSkill(c, n)) push(n);
+    for (const n of theme.skills) push(n);
+    for (const n of SPILL_SKILLS) if (PF.isClassSkill(c, n)) push(n);
+    for (const n of SPILL_SKILLS) push(n);
+    c.skills = {};
+    for (const n of ordered) {
+      if (budget <= 0) break;
+      const put = Math.min(cap, budget);
+      c.skills[n] = put; budget -= put;
+    }
+  }
+
   // ---------- build a real character object from the picks ----------
   function buildCharacter(picks) {
     const c = PF.newCharacter(picks.race + ' ' + picks.cls);
@@ -148,6 +185,7 @@
     c.levels = Array.from({ length: picks.level }, () => ({
       cls: picks.cls, archetypes: [], hp: null, fcb: 'hp',
     }));
+    if (picks.skillTheme) distributeSkills(c, picks.skillTheme);  // needs levels + abilities set
     c.notes = 'Rolled by the Random Character Generator (seed ' + picks.seed + ').';
     return c;
   }
@@ -236,7 +274,7 @@
         (your race nudges your class, your class shapes your ability scores).
         Everything rolled is rules-legal.</p>
         <div class="gen-reels">
-          ${reelHTML('level', 'Level')}${reelHTML('race', 'Race')}${reelHTML('class', 'Class')}${reelHTML('alignment', 'Alignment')}
+          ${reelHTML('level', 'Level')}${reelHTML('race', 'Race')}${reelHTML('class', 'Class')}${reelHTML('alignment', 'Alignment')}${reelHTML('skilltheme', 'Skill Focus')}
         </div>
         <div class="gen-reels">
           ${ABILITIES.map(ab => reelHTML(ab, AB_LABEL[ab], true)).join('')}
@@ -284,11 +322,15 @@
       const finals = ABILITIES.map(ab =>
         `${AB_LABEL[ab]} <b>${PF.abilityScore(c, ab)}</b>`).join(' · ');
       const alignLabel = (ALIGNS.find(a => a.code === picks.alignment) || {}).label || picks.alignment;
+      const theme = ((G().skillThemes || []).find(t => t.id === picks.skillTheme) || {});
+      const topSkills = Object.entries(c.skills)
+        .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, r]) => `${n} ${r}`).join(', ');
       const incr = Math.floor(picks.level / 4);
       main.querySelector('#gen-result').innerHTML =
         `<b>${picks.race} ${picks.cls}</b>, level ${picks.level} — ${alignLabel}<br>
          <span class="small">${finals}</span>
-         <span class="small muted">(incl. racial mods${incr ? ' & +' + incr + ' level increases' : ''} — seed ${picks.seed})</span>`;
+         <span class="small muted">(incl. racial mods${incr ? ' & +' + incr + ' level increases' : ''} — seed ${picks.seed})</span><br>
+         <span class="small">🎯 ${theme.label || ''}${topSkills ? ' — ' + topSkills + '…' : ''}</span>`;
     }
 
     function spin() {
@@ -327,9 +369,18 @@
           const chosen = weightedPick(rng, cands);
           setTimeout(() => spinReel(reel(ab), cands, chosen, rng, () => {
             picks.abilities[ab] = chosen.value;
-            if (++landed === ABILITIES.length) finishSpin();
+            if (++landed === ABILITIES.length) spinSkillTheme();
           }, { duration: 0.85 }), idx * 140);
         });
+      };
+      const spinSkillTheme = () => {
+        status.textContent = 'Rolling skill focus…';
+        const cands = skillThemeCandidates(picks, syn);
+        const chosen = weightedPick(rng, cands);
+        spinReel(reel('skilltheme'), cands, chosen, rng, () => {
+          picks.skillTheme = chosen.value;
+          finishSpin();
+        }, { duration: 1.0 });
       };
       next();
     }
@@ -341,5 +392,5 @@
 
   window.PFGEN = { renderView, buildCharacter, legalAlignments, alignmentCandidates,
                    abilityCandidates, levelCandidates, raceCandidates, classCandidates,
-                   mulberry32, weightedPick };
+                   skillThemeCandidates, distributeSkills, mulberry32, weightedPick };
 })();
