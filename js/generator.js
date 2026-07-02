@@ -152,14 +152,27 @@
     if (!theme) return;
     let budget = PF.skillPointsBudget(c);
     const cap = c.levels.length;
-    const seen = new Set(), ordered = [];
-    const push = n => { if (!seen.has(n)) { seen.add(n); ordered.push(n); } };
-    for (const n of theme.skills) if (PF.isClassSkill(c, n)) push(n);
-    for (const n of theme.skills) push(n);
-    for (const n of SPILL_SKILLS) if (PF.isClassSkill(c, n)) push(n);
-    for (const n of SPILL_SKILLS) push(n);
+    const seen = new Set(), themeOrder = [], spillOrder = [];
+    const push = (arr, n) => { if (!seen.has(n)) { seen.add(n); arr.push(n); } };
+    for (const n of theme.skills) if (PF.isClassSkill(c, n)) push(themeOrder, n);
+    for (const n of theme.skills) push(themeOrder, n);
+    for (const n of SPILL_SKILLS) if (PF.isClassSkill(c, n)) push(spillOrder, n);
+    for (const n of SPILL_SKILLS) push(spillOrder, n);
     c.skills = {};
-    for (const n of ordered) {
+    // phase A — round-robin the theme's skills (priority order, class skills
+    // first) so even a lean budget covers the whole package instead of the
+    // first skill swallowing every point; earlier skills get the remainders
+    while (budget > 0) {
+      let placed = false;
+      for (const n of themeOrder) {
+        if (budget <= 0) break;
+        const r = c.skills[n] || 0;
+        if (r < cap) { c.skills[n] = r + 1; budget--; placed = true; }
+      }
+      if (!placed) break;                      // whole theme is at max ranks
+    }
+    // phase B — max-fill common class skills with whatever's left
+    for (const n of spillOrder) {
       if (budget <= 0) break;
       const put = Math.min(cap, budget);
       c.skills[n] = put; budget -= put;
@@ -274,10 +287,13 @@
         (your race nudges your class, your class shapes your ability scores).
         Everything rolled is rules-legal.</p>
         <div class="gen-reels">
-          ${reelHTML('level', 'Level')}${reelHTML('race', 'Race')}${reelHTML('class', 'Class')}${reelHTML('alignment', 'Alignment')}${reelHTML('skilltheme', 'Skill Focus')}
+          ${reelHTML('level', 'Level')}${reelHTML('race', 'Race')}${reelHTML('class', 'Class')}${reelHTML('alignment', 'Alignment')}
         </div>
         <div class="gen-reels">
           ${ABILITIES.map(ab => reelHTML(ab, AB_LABEL[ab], true)).join('')}
+        </div>
+        <div class="gen-reels">
+          ${reelHTML('skilltheme', 'Skill Focus')}
         </div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
           <button class="primary" id="gen-spin">🎰 Spin</button>
