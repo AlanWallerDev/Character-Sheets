@@ -39,7 +39,7 @@ PFGENDATA.classProfiles = {
   Fighter:   { roll:true,  keys:['str','dex'],       role:'martial', defense:'heavy',  weapon:'twoHanded',  tags:['frontline','versatile'] },
   Monk:      { roll:true,  keys:['dex','wis'],       role:'martial', defense:'none',   weapon:'unarmed',    tags:['mobile','lawful'] },
   Paladin:   { roll:true,  keys:['str','cha'],       role:'divine',  defense:'heavy',  weapon:'oneHand',    tags:['frontline','smite'], list:'Paladin' },
-  Ranger:    { roll:true,  keys:['dex','wis'],       role:'martial', defense:'medium', weapon:'ranged',     tags:['wild','skirmish'], list:'Druid' },
+  Ranger:    { roll:true,  keys:['dex','wis'],       role:'martial', defense:'medium', weapon:'ranged',     tags:['wild','skirmish'], list:'Ranger' },
   Rogue:     { roll:true,  keys:['dex','int'],       role:'skill',   defense:'light',  weapon:'finesse',    tags:['skill','sneak'] },
   Sorcerer:  { roll:true,  keys:['cha','con'],       role:'arcane',  defense:'none',   weapon:'none',       tags:['blaster','spont'], list:'Wizard' },
   Wizard:    { roll:true,  keys:['int','dex'],       role:'arcane',  defense:'none',   weapon:'none',       tags:['blaster','control'], list:'Wizard' },
@@ -92,7 +92,9 @@ PFGENDATA.raceRarity = {
     'core race':       10,
     'featured race':    4,
     'uncommon race':    1.5,
-    '':                 1,   // unclassified / monstrous
+    'other race':       0.8, // 36 races: settlement/planar/obscure splatbook
+    'monster race':     0.2, // 6 races: drow noble, svirfneblin… rare but rollable
+    '':                 1,   // safety default for anything unclassified
   },
   // optional explicit per-race multipliers (name -> factor)
   override: {
@@ -154,6 +156,9 @@ PFGENDATA.skillThemes = [
  *   classes : explicit class names (optional)
  *   roles   : class roles this fits (optional; OR-matched with classes)
  *   minLevel: don't offer below this
+ *   requiresCasting: only offer if PF.casterInfo(class) is truthy — keeps
+ *     metamagic/Spell Focus bundles away from Kineticist/Psychic/Medium etc.,
+ *     whose casting the engine doesn't support
  * EXPAND: add reach-fighter, grapple, dirty-trick, metamagic-blaster variants,
  * teamwork bundles, style-feat (e.g. Crane/Dragon) chains.
  * ------------------------------------------------------------------------- */
@@ -199,29 +204,35 @@ PFGENDATA.featBundles = [
     feats:['Dodge','Mobility','Combat Reflexes','Power Attack','Spring Attack'] },
 
   // --- Casters ---
-  { id:'blaster-evoker', label:'Stormcaller', roles:['arcane'], classes:['Wizard','Sorcerer','Arcanist','Magus','Psychic'], weapon:'none',
-    favors:{int:1,cha:1}, minLevel:1,
+  { id:'blaster-evoker', label:'Stormcaller', roles:['arcane'], classes:['Wizard','Sorcerer','Arcanist','Magus'], weapon:'none',
+    favors:{int:1,cha:1}, minLevel:1, requiresCasting:true,
     feats:['Spell Focus','Spell Penetration','Greater Spell Focus','Empower Spell','Greater Spell Penetration','Maximize Spell','Quicken Spell'] },
 
   { id:'controller', label:'Puppeteer', roles:['arcane','divine'], weapon:'none',
-    favors:{int:1,wis:1,cha:1}, minLevel:1,
+    favors:{int:1,wis:1,cha:1}, minLevel:1, requiresCasting:true,
     feats:['Spell Focus','Improved Initiative','Greater Spell Focus','Spell Penetration','Heighten Spell','Quicken Spell'] },
 
   { id:'summoner-conjurer', label:'Caller of Beasts', roles:['arcane','divine','nature'], weapon:'none',
-    favors:{int:1,cha:1,wis:1}, minLevel:1,
+    favors:{int:1,cha:1,wis:1}, minLevel:1, requiresCasting:true,
     feats:['Spell Focus','Augment Summoning','Spell Penetration','Greater Spell Focus'] },
 
   { id:'battle-caster', label:'War Mage', roles:['gish','divine'], classes:['Magus','Warpriest','Cleric','Bloodrager','Inquisitor'], weapon:'oneHand',
-    favors:{str:1,wis:1,int:1}, minLevel:1,
+    favors:{str:1,wis:1,int:1}, minLevel:1, requiresCasting:true,
     feats:['Combat Casting','Power Attack','Weapon Focus','Toughness','Iron Will'] },
 ];
 
 /* ---------------------------------------------------------------------------
  * 7. SPELL THEMES  (per spell-list, FLAT priority-ordered name lists)
- * Keyed by the spell-LIST name in spell.levels{} — = PF.CASTERS[class].list,
- * NOT always the class name. Shared lists cover several classes: Wizard list ->
- * Wizard/Sorcerer/Arcanist; Cleric -> Cleric/Oracle/Warpriest/Inquisitor;
- * Druid -> Druid/Ranger/Hunter; Bard -> Bard/Skald.
+ * Keyed by the THEME-lookup list in classProfiles[cls].list. CONTRACT: the
+ * pipeline uses classProfiles.list to pick a theme, but PF.CASTERS[cls].list
+ * for actual level bucketing/legality — the two DIVERGE for Sorcerer (themes
+ * under Wizard, levels from Sorcerer list) and Inquisitor (themes under
+ * Cleric, levels from Inquisitor list); off-list names are skipped per the
+ * usual contract. Shared coverage: Wizard themes -> Wizard/Sorcerer/Arcanist;
+ * Cleric -> Cleric/Oracle/Warpriest/Inquisitor; Druid -> Druid/Hunter;
+ * Bard -> Bard/Skald. Ranger has its OWN list (371 spells, L1-4) and themes.
+ * Ninja: engine lists it as a caster but ZERO spells exist on a Ninja list —
+ * pipeline must treat empty caster lists as non-casters.
  *
  * Each theme is a FLAT `spells:[...]` list ordered by priority (roughly low ->
  * high level). The generator looks up each spell's ACTUAL level on the chosen
@@ -320,6 +331,21 @@ PFGENDATA.spellThemes = {
       "Summon Nature's Ally V","Tree Stride","Summon Nature's Ally VI","Stone Tell","Summon Nature's Ally VII",
       "Heal","Animate Plants","Summon Nature's Ally VIII","Animal Shapes","Summon Nature's Ally IX","Shapechange",
       "Elemental Swarm"] },
+  ],
+  // ===== RANGER (own list, spell levels 1-4) =====
+  Ranger: [
+    { id:"deadeye", label:"Deadeye — Archery & the Hunt", spells:[
+      "Gravity Bow","Longshot","Aspect Of The Falcon","Hunter's Howl","Longstrider","Endure Elements",
+      "Cure Light Wounds","Barkskin","Hunter's Eye","Perceive Cues","Cat's Grace","Wind Wall","Chameleon Stride",
+      "Named Bullet","Instant Enemy","Darkvision","Cure Moderate Wounds","Aspect Of The Stag","Water Walk",
+      "Bow Spirit","Freedom Of Movement","Cure Serious Wounds","Nondetection","Commune With Nature"] },
+    { id:"warden", label:"Warden — Wilderness & Companion", spells:[
+      "Entangle","Longstrider","Pass Without Trace","Magic Fang","Delay Poison","Lead Blades",
+      "Summon Nature's Ally I","Feather Step","Barkskin","Spike Growth","Snare","Hold Animal","Bloodhound",
+      "Summon Nature's Ally II","Cure Light Wounds","Versatile Weapon","Magic Fang, Greater","Remove Disease",
+      "Neutralize Poison","Summon Nature's Ally III","Cure Moderate Wounds","Protection From Energy",
+      "Animal Growth","Terrain Bond","Tree Stride","Summon Nature's Ally IV","Cure Serious Wounds",
+      "Freedom Of Movement"] },
   ],
   // ===== BARD / SKALD =====
   Bard: [
