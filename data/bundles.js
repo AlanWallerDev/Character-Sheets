@@ -498,3 +498,14 @@ PFGENDATA.gearKits = {
     none:   [],
   },
 };
+
+/* ---------------------------------------------------------------------------
+ * 9. WEALTH BY LEVEL  (PF1e Core "Character Wealth by Level" table)
+ * Index 0 = level 1 (average class starting wealth). The generator buys the
+ * gear kit from this budget and banks the remainder as coin — mundane gear
+ * only for now (EXPAND: spend high-level wealth on magic weapons/armor).
+ * ------------------------------------------------------------------------- */
+PFGENDATA.wealthByLevel = [
+  150, 1000, 3000, 6000, 10500, 16000, 23500, 33000, 46000, 62000,
+  82000, 108000, 140000, 185000, 240000, 315000, 410000, 530000, 685000, 880000,
+];

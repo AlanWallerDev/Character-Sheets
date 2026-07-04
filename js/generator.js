@@ -242,6 +242,104 @@
     }
   }
 
+  // ---------- spells ----------
+  // Themes live under the profile's list hint (Sorcerer -> Wizard themes);
+  // actual spell LEVELS come from the engine list (PF.casterInfo(cls).list) —
+  // see the pipeline contract in data/bundles.js. Occult casters (Psychic…)
+  // have no authored themes yet and fall through to pure back-fill.
+  function spellPathCandidates(picks) {
+    if (!PF.casterInfo(picks.cls)) return [];
+    const prof = (G().classProfiles || {})[picks.cls] || {};
+    const themes = (G().spellThemes || {})[prof.list] || [];
+    return themes.map(t => ({ value: t.id, label: t.label, weight: 1 }));
+  }
+
+  function assignSpells(c, picks) {
+    const cls = picks.cls;
+    const info = PF.casterInfo(cls);
+    if (!info) return;
+    const slots = PF.spellSlots(c, cls);
+    if (!slots) return;                       // no casting yet at this level
+    const known = PF.spellsKnownRow(c, cls);  // per-level max for spontaneous; null = prepared
+    const prof = (G().classProfiles || {})[cls] || {};
+    const themes = (G().spellThemes || {})[prof.list] || [];
+    const theme = themes.find(t => t.id === picks.spellTheme);
+    // bucket the theme's flat list by each spell's ACTUAL level on this class's list
+    const byLvl = {};
+    for (const name of (theme ? theme.spells : [])) {
+      const sp = PF.getSpell(name);
+      const l = sp && sp.levels ? sp.levels[info.list] : null;
+      if (l == null) continue;                // off-list name: skip per contract
+      (byLvl[l] = byLvl[l] || []).push(name);
+    }
+    const backfillAt = l => PFDATA.spells
+      .filter(s => s.levels && s.levels[info.list] === l).map(s => s.name);
+    // levels come from the slot table; summoner-style casters know cantrips
+    // without a slot row, so add level 0 when the known table says so
+    const levels = slots.slice();
+    if (known && known[0] != null && !levels.some(s => s.lvl === 0))
+      levels.unshift({ lvl: 0, total: null });
+    for (const s of levels) {
+      const knownMax = known ? known[s.lvl] : null;
+      const castable = (s.total != null && s.total > 0) || (knownMax != null && knownMax > 0);
+      if (!castable) continue;
+      // spontaneous: exactly the known count (the tab flags overshoot);
+      // prepared: slots plus a little variety to prepare from
+      const target = knownMax != null ? knownMax : (s.total || 0) + (s.lvl === 0 ? 2 : 1);
+      const chosen = [];
+      for (const n of (byLvl[s.lvl] || [])) { if (chosen.length >= target) break; if (!chosen.includes(n)) chosen.push(n); }
+      for (const n of backfillAt(s.lvl))    { if (chosen.length >= target) break; if (!chosen.includes(n)) chosen.push(n); }
+      // prepared casters: spread the day's slots across the picks (first gets remainder)
+      let prepLeft = info.kind === 'prepared' && s.total ? s.total : 0;
+      chosen.forEach((n, i) => {
+        const per = prepLeft > 0 ? Math.ceil(prepLeft / (chosen.length - i)) : 0;
+        c.spells.push({ name: n, cls, lvl: s.lvl, prepared: per || '' });
+        prepLeft -= per;
+      });
+    }
+  }
+
+  // ---------- gear ----------
+  const COIN_GP = { pp: 10, gp: 1, sp: 0.1, cp: 0.01 };
+  function costGp(str) {
+    const m = /([\d,]+(?:\.\d+)?)\s*(pp|gp|sp|cp)/i.exec(str || '');
+    return m ? parseFloat(m[1].replace(/,/g, '')) * COIN_GP[m[2].toLowerCase()] : 0;
+  }
+
+  function applyGear(c, picks) {
+    const prof = (G().classProfiles || {})[picks.cls] || {};
+    const bundle = (G().featBundles || []).find(b => b.id === picks.featBundle);
+    const kit = (G().gearKits || {})[(bundle && bundle.weapon) || prof.weapon || 'none']
+             || (G().gearKits || {}).none || { weapons: [], misc: [] };
+    let gold = (G().wealthByLevel || [])[picks.level - 1] || 150;
+    const add = (entry, kind, equipped) => {          // mirrors the Gear tab's addGear
+      const dup = c.gear.find(g => g.name === entry.name && g.kind === kind);
+      if (dup) { dup.qty += 1; gold -= costGp(entry.cost); return; }
+      c.gear.push({ name: entry.name, kind, qty: 1, equipped: !!equipped,
+        weight: parseFloat(String(entry.weight || '').replace(/[^\d.]/g, '')) || 0,
+        cost: entry.cost || '', note: '' });
+      gold -= costGp(entry.cost);
+    };
+    // best armor the budget allows from the class's tier (list is best-first)
+    for (const name of (G().gearKits.armorByTier || {})[prof.defense] || []) {
+      const a = PF.getArmor(name);
+      if (a && costGp(a.cost) <= gold) { add(a, 'armor', true); break; }
+    }
+    kit.weapons.forEach((name, i) => {
+      // shields live in both lists — as armor they equip and grant AC
+      const a = PF.getArmor(name);
+      if (a) { if (costGp(a.cost) <= gold) add(a, 'armor', true); return; }
+      const w = PF.getWeapon(name);
+      if (w && costGp(w.cost) <= gold) add(w, 'weapon', i === 0);
+    });
+    for (const name of kit.misc) {
+      const it = PF.getItem(name) || PF.getWeapon(name);
+      if (it && costGp(it.cost) <= gold) add(it, it.dmgS !== undefined ? 'weapon' : 'item');
+    }
+    // bank the rest (magic-item shopping is a later phase)
+    c.money = { pp: 0, gp: Math.max(0, Math.floor(gold)), sp: 0, cp: 0 };
+  }
+
   // ---------- build a real character object from the picks ----------
   // baseCharacter = identity/levels/abilities only (used for weighting later
   // reels); buildCharacter layers skills + feats on top. Both are pure.
@@ -270,6 +368,8 @@
     const c = baseCharacter(picks);
     if (picks.skillTheme) distributeSkills(c, picks.skillTheme);  // needs levels + abilities set
     if (picks.featBundle) applyFeats(c, picks);
+    assignSpells(c, picks);                   // no-op for non-casters; themeless casters back-fill
+    applyGear(c, picks);
     c.notes = 'Rolled by the Random Character Generator (seed ' + picks.seed + ').';
     return c;
   }
@@ -364,7 +464,7 @@
           ${ABILITIES.map(ab => reelHTML(ab, AB_LABEL[ab], true)).join('')}
         </div>
         <div class="gen-reels">
-          ${reelHTML('skilltheme', 'Skill Focus')}${reelHTML('featbundle', 'Feat Path')}
+          ${reelHTML('skilltheme', 'Skill Focus')}${reelHTML('featbundle', 'Feat Path')}${reelHTML('spelltheme', 'Spell Path')}
         </div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
           <button class="primary" id="gen-spin">🎰 Spin</button>
@@ -415,12 +515,18 @@
       const incr = Math.floor(picks.level / 4);
       const featList = c.feats.map(f => f.name).join(', ');
       const bundle = ((G().featBundles || []).find(b => b.id === picks.featBundle) || {});
+      const prof = (G().classProfiles || {})[picks.cls] || {};
+      const spTheme = (((G().spellThemes || {})[prof.list] || []).find(t => t.id === picks.spellTheme) || {});
+      const spellLine = c.spells.length
+        ? `<br><span class="small">✨ ${spTheme.label || 'Class list'} — ${c.spells.length} spells (L0–${Math.max(...c.spells.map(s => s.lvl))})</span>` : '';
+      const gearNames = c.gear.map(g => g.name + (g.qty > 1 ? ' ×' + g.qty : '')).join(', ');
       main.querySelector('#gen-result').innerHTML =
         `<b>${picks.race} ${picks.cls}</b>, level ${picks.level} — ${alignLabel}<br>
          <span class="small">${finals}</span>
          <span class="small muted">(incl. racial mods${incr ? ' & +' + incr + ' level increases' : ''} — seed ${picks.seed})</span><br>
          <span class="small">🎯 ${theme.label || ''}${topSkills ? ' — ' + topSkills + '…' : ''}</span><br>
-         <span class="small">⚔ ${bundle.label || ''} (${c.feats.length} feats)${featList ? ' — ' + featList : ''}</span>`;
+         <span class="small">⚔ ${bundle.label || ''} (${c.feats.length} feats)${featList ? ' — ' + featList : ''}</span>${spellLine}<br>
+         <span class="small">🎒 ${gearNames || 'no gear'} — ${c.money.gp} gp banked</span>`;
     }
 
     function spin() {
@@ -482,6 +588,27 @@
         picks.featBundle2 = rest.length ? weightedPick(rng, rest).value : null;
         spinReel(reel('featbundle'), cands, chosen, rng, () => {
           picks.featBundle = chosen.value;
+          spinSpellTheme();
+        }, { duration: 1.0 });
+      };
+      const spinSpellTheme = () => {
+        const cands = spellPathCandidates(picks);
+        if (!cands.length) {                  // non-caster (or themeless occult caster)
+          picks.spellTheme = null;
+          // "class list" only if this class actually gets spells (Ninja is in
+          // the engine's caster table but has no spell list in the data)
+          const castsAnything = !!PF.spellSlots(baseCharacter(picks), picks.cls);
+          const strip = reel('spelltheme').querySelector('.gen-reel-strip');
+          strip.style.transition = 'none'; strip.style.transform = 'translateY(0)';
+          strip.innerHTML = '<div></div><div style="color:var(--muted,#888)">' +
+            (castsAnything ? 'class list' : 'no spellcasting') + '</div><div></div>';
+          finishSpin();
+          return;
+        }
+        status.textContent = 'Rolling spell path…';
+        const chosen = weightedPick(rng, cands);
+        spinReel(reel('spelltheme'), cands, chosen, rng, () => {
+          picks.spellTheme = chosen.value;
           finishSpin();
         }, { duration: 1.0 });
       };
@@ -496,5 +623,6 @@
   window.PFGEN = { renderView, buildCharacter, legalAlignments, alignmentCandidates,
                    abilityCandidates, levelCandidates, raceCandidates, classCandidates,
                    skillThemeCandidates, distributeSkills, featBundleCandidates,
-                   featAllowance, mulberry32, weightedPick };
+                   featAllowance, spellPathCandidates, assignSpells, applyGear,
+                   mulberry32, weightedPick };
 })();
