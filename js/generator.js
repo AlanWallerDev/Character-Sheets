@@ -320,18 +320,30 @@
         cost: entry.cost || '', note: '' });
       gold -= costGp(entry.cost);
     };
-    // best armor the budget allows from the class's tier (list is best-first)
+    // buy in phases so a level-1 budget covers the essentials: one primary
+    // weapon, then armor, THEN backup weapons/shields — buying the whole
+    // weapon list up front left L1 fighters in 145gp of two-handers and no
+    // armor, while armor-first left L1 clerics weaponless (Chainmail = 150gp)
+    let primaryBought = false;
+    const backups = [];
+    for (const name of kit.weapons) {
+      const a = PF.getArmor(name);                   // shields wait for phase 3
+      if (a) { backups.push(name); continue; }
+      const w = PF.getWeapon(name);
+      if (!w) continue;
+      if (!primaryBought && costGp(w.cost) <= gold) { add(w, 'weapon', true); primaryBought = true; }
+      else backups.push(name);
+    }
     for (const name of (G().gearKits.armorByTier || {})[prof.defense] || []) {
       const a = PF.getArmor(name);
       if (a && costGp(a.cost) <= gold) { add(a, 'armor', true); break; }
     }
-    kit.weapons.forEach((name, i) => {
-      // shields live in both lists — as armor they equip and grant AC
-      const a = PF.getArmor(name);
-      if (a) { if (costGp(a.cost) <= gold) add(a, 'armor', true); return; }
+    for (const name of backups) {
+      const a = PF.getArmor(name);                   // shields equip + grant AC
+      if (a) { if (costGp(a.cost) <= gold) add(a, 'armor', true); continue; }
       const w = PF.getWeapon(name);
-      if (w && costGp(w.cost) <= gold) add(w, 'weapon', i === 0);
-    });
+      if (w && costGp(w.cost) <= gold) add(w, 'weapon', false);
+    }
     for (const name of kit.misc) {
       const it = PF.getItem(name) || PF.getWeapon(name);
       if (it && costGp(it.cost) <= gold) add(it, it.dmgS !== undefined ? 'weapon' : 'item');
@@ -444,6 +456,16 @@
     setTimeout(finish, dur * 1000 + 300);          // safety net
   }
 
+  // Land a reel on a fixed result instantly (no spin) — used when the user
+  // pins a value (e.g. picks the level) instead of rolling it.
+  function landReel(reelEl, label) {
+    const strip = reelEl.querySelector('.gen-reel-strip');
+    strip.style.transition = 'none';
+    strip.style.transform = 'translateY(0)';
+    strip.innerHTML = `<div></div><div class="win">${label}</div><div></div>`;
+    reelEl.classList.add('done');
+  }
+
   // ---------- the view ----------
   function renderView(main, api) {
     injectCss();
@@ -470,6 +492,12 @@
           <button class="primary" id="gen-spin">🎰 Spin</button>
           <button id="gen-save" style="display:none">💾 Save to Vault</button>
           <button id="gen-cancel">← Back</button>
+          <label class="gen-slider">Level
+            <select id="gen-level" title="Roll the level on the reel, or pin it">
+              <option value="roll">🎲 Roll</option>
+              ${Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
+            </select>
+          </label>
           <span class="gen-slider">🎲 Chaos
             <input type="range" id="gen-syn" min="0" max="100" value="70" title="How strongly your class steers your ability scores">
           ⚙ Synergy</span>
@@ -538,13 +566,19 @@
       saveBtn.style.display = 'none';
       main.querySelector('#gen-result').innerHTML = '';
 
-      // dependent reels spin in sequence…
+      // dependent reels spin in sequence… (a pinned level lands instantly)
+      const lvlChoice = main.querySelector('#gen-level').value;
       const seq = [
         { id: 'level',     label: 'level',     cands: () => levelCandidates(),        set: v => picks.level = v },
         { id: 'race',      label: 'race',      cands: () => raceCandidates(),         set: v => picks.race = v },
         { id: 'class',     label: 'class',     cands: () => classCandidates(picks),   set: v => picks.cls = v },
         { id: 'alignment', label: 'alignment', cands: () => alignmentCandidates(picks), set: v => picks.alignment = v },
       ];
+      if (lvlChoice !== 'roll') {
+        picks.level = parseInt(lvlChoice, 10);
+        landReel(reel('level'), 'Level ' + picks.level);
+        seq.shift();
+      }
       let i = 0;
       const next = () => {
         if (i < seq.length) {

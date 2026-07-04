@@ -490,11 +490,12 @@ PFGENDATA.gearKits = {
   unarmed:    { weapons:['Sai','Nunchaku'],                              misc:['Backpack'] },
   natural:    { weapons:['Dagger'],                                      misc:['Backpack'] },
   none:       { weapons:['Dagger','Quarterstaff'],                       misc:['Spell Component Pouch','Backpack'] },
-  // Armor offered by the class's defense tier (gearKits picks the best affordable)
+  // Armor offered by the class's defense tier, best-first — each tier ends in
+  // cheap fallbacks so a level-1 budget still buys SOMETHING wearable
   armorByTier: {
-    heavy:  ['Full plate','Half-plate','Breastplate','Chainmail'],
-    medium: ['Breastplate','Chain shirt','Hide Armor'],
-    light:  ['Chain shirt','Studded leather','Leather Armor'],
+    heavy:  ['Full plate','Half-plate','Breastplate','Chainmail','Scale mail','Leather'],
+    medium: ['Breastplate','Chain shirt','Scale mail','Hide','Leather'],
+    light:  ['Chain shirt','Studded leather','Leather','Padded'],
     none:   [],
   },
 };
