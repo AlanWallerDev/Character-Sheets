@@ -98,11 +98,35 @@
   }
 
   function alignmentCandidates(picks) {
-    const ok = legalAlignments(picks.cls);
+    let ok = legalAlignments(picks.cls);
+    if (picks.cls2) {                             // multiclass: legal for BOTH
+      const ok2 = legalAlignments(picks.cls2);
+      ok = ok.filter(a => ok2.includes(a));
+    }
     return ALIGNS.filter(a => ok.includes(a.code)).map(a => ({
       value: a.code, label: a.label,
       weight: a.code.endsWith('E') ? 0.35 : 1,   // evil PCs are rare, not impossible
     }));
+  }
+
+  // Occasional multiclass (PFGENDATA.multiclass): the second class must share
+  // at least one legal alignment with the first (Monk + Barbarian is
+  // impossible) and is weighted toward classes riding the same ability scores.
+  function class2Candidates(picks) {
+    const profiles = G().classProfiles || {};
+    const p1 = profiles[picks.cls] || {};
+    const a1 = legalAlignments(picks.cls);
+    const out = [];
+    for (const [name, prof] of Object.entries(profiles)) {
+      if (!prof.roll || name === picks.cls) continue;
+      if (!PFDATA.classes.some(k => k.name === name)) continue;
+      if (!legalAlignments(name).some(a => a1.includes(a))) continue;
+      let w = 1;
+      if ((prof.keys || []).some(k => (p1.keys || []).includes(k))) w *= 1.7;
+      if (prof.role === p1.role) w *= 1.3;
+      out.push({ value: name, label: name, weight: w });
+    }
+    return out;
   }
 
   // Ability reels: 7-19, a bell curve whose CENTER slides with the synergy
@@ -255,7 +279,11 @@
   }
 
   function assignSpells(c, picks) {
-    const cls = picks.cls;
+    assignSpellsFor(c, picks.cls, picks.spellTheme);
+    if (picks.cls2) assignSpellsFor(c, picks.cls2, null);  // secondary: back-fill only
+  }
+
+  function assignSpellsFor(c, cls, themeId) {
     const info = PF.casterInfo(cls);
     if (!info) return;
     const slots = PF.spellSlots(c, cls);
@@ -263,7 +291,7 @@
     const known = PF.spellsKnownRow(c, cls);  // per-level max for spontaneous; null = prepared
     const prof = (G().classProfiles || {})[cls] || {};
     const themes = (G().spellThemes || {})[prof.list] || [];
-    const theme = themes.find(t => t.id === picks.spellTheme);
+    const theme = themes.find(t => t.id === themeId);
     // bucket the theme's flat list by each spell's ACTUAL level on this class's list
     const byLvl = {};
     for (const name of (theme ? theme.spells : [])) {
@@ -356,7 +384,7 @@
   // baseCharacter = identity/levels/abilities only (used for weighting later
   // reels); buildCharacter layers skills + feats on top. Both are pure.
   function baseCharacter(picks) {
-    const c = PF.newCharacter(picks.race + ' ' + picks.cls);
+    const c = PF.newCharacter(picks.race + ' ' + picks.cls + (picks.cls2 ? '/' + picks.cls2 : ''));
     const prof = (G().classProfiles || {})[picks.cls] || {};
     const race = (PFDATA.races || []).find(r => r.name === picks.race);
     const key = (prof.keys || ['str'])[0];
@@ -370,9 +398,13 @@
     c.levelIncreases[key] = Math.floor(picks.level / 4);  // L4/8/12/16/20 -> key ability
     c.favoredClass = picks.cls;
     c.hpMode = 'avg';
-    c.levels = Array.from({ length: picks.level }, () => ({
-      cls: picks.cls, archetypes: [], hp: null, fcb: 'hp',
-    }));
+    // multiclass split: secondary gets 1..half the levels, primary the rest;
+    // FCB (+1 hp) only on favored-class (primary) levels per RAW
+    const lv2 = picks.cls2 ? Math.min(Math.max(1, picks.levels2 || 1), picks.level - 1) : 0;
+    c.levels = [
+      ...Array.from({ length: picks.level - lv2 }, () => ({ cls: picks.cls, archetypes: [], hp: null, fcb: 'hp' })),
+      ...Array.from({ length: lv2 }, () => ({ cls: picks.cls2, archetypes: [], hp: null, fcb: '' })),
+    ];
     return c;
   }
 
@@ -408,12 +440,15 @@
       .gen-reel.done .gen-reel-window{border-color:var(--accent,#c9a227)}
       .gen-reel.done .gen-reel-strip div.win{color:var(--accent,#c9a227);font-weight:bold}
       .gen-reel.done .gen-reel-strip div:not(.win){opacity:.45}
+      .gen-reel.done{cursor:pointer}
+      .gen-reel.locked .gen-reel-window{border-color:#7ec4e8;box-shadow:0 0 6px rgba(126,196,232,.35)}
+      .gen-reel.locked .gen-reel-label::after{content:' 🔒'}
       .gen-slider{display:flex;align-items:center;gap:8px;font-size:.9em;color:var(--muted,#999)}
-      .gen-slider input{-webkit-appearance:none;appearance:none;width:140px;height:6px;border-radius:3px;
+      .gen-slider input[type=range]{-webkit-appearance:none;appearance:none;width:140px;height:6px;border-radius:3px;
         background:rgba(255,255,255,.15);outline:none;cursor:pointer}
-      .gen-slider input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;
+      .gen-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;
         border-radius:50%;background:#f4df9a;border:2px solid #1a1410;box-shadow:0 0 3px rgba(0,0,0,.6)}
-      .gen-slider input::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+      .gen-slider input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
         background:#f4df9a;border:2px solid #1a1410;box-shadow:0 0 3px rgba(0,0,0,.6)}
     `;
     document.head.appendChild(st);
@@ -490,9 +525,10 @@
       <div class="panel">
         <p class="small muted">Spin the reels — each result weights the next
         (your race nudges your class, your class shapes your ability scores).
-        Everything rolled is rules-legal.</p>
+        Everything rolled is rules-legal. After a spin, click a reel to
+        🔒 lock it — Spin Again re-rolls only the unlocked reels.</p>
         <div class="gen-reels">
-          ${reelHTML('level', 'Level')}${reelHTML('race', 'Race')}${reelHTML('class', 'Class')}${reelHTML('alignment', 'Alignment')}
+          ${reelHTML('level', 'Level')}${reelHTML('race', 'Race')}${reelHTML('class', 'Class')}${reelHTML('class2', '2nd Class')}${reelHTML('alignment', 'Alignment')}
         </div>
         <div class="gen-reels">
           ${ABILITIES.map(ab => reelHTML(ab, AB_LABEL[ab], true)).join('')}
@@ -510,6 +546,10 @@
               ${Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
             </select>
           </label>
+          <label class="gen-slider">Seed
+            <input id="gen-seed" placeholder="random" style="width:130px"
+              title="Enter a seed to reproduce a spin (same seed + same locks = same character)">
+          </label>
           <span class="gen-slider">🎲 Chaos
             <input type="range" id="gen-syn" min="0" max="100" value="70" title="How strongly your class steers your ability scores">
           ⚙ Synergy</span>
@@ -523,6 +563,30 @@
     const saveBtn = main.querySelector('#gen-save');
     const spinBtn = main.querySelector('#gen-spin');
     let picks = null;
+    let spinning = false;
+    const locks = {};                        // reelId -> pinned value, kept across spins
+
+    // click a landed reel to lock/unlock it for the next spin
+    const lockableValue = id => {
+      if (!picks) return undefined;
+      if (id === 'level') return picks.level;
+      if (id === 'race') return picks.race;
+      if (id === 'class') return picks.cls;
+      if (id === 'alignment') return picks.alignment;
+      if (id === 'skilltheme') return picks.skillTheme;
+      if (id === 'featbundle') return picks.featBundle;
+      if (id === 'spelltheme') return picks.spellTheme;
+      if (ABILITIES.includes(id)) return (picks.abilities || {})[id];
+      return undefined;                      // class2 is derived, not lockable
+    };
+    main.querySelectorAll('.gen-reel').forEach(el => el.addEventListener('click', () => {
+      if (spinning || !el.classList.contains('done')) return;
+      const id = el.dataset.reel;
+      if (locks[id] !== undefined) { delete locks[id]; el.classList.remove('locked'); return; }
+      const val = lockableValue(id);
+      if (val === undefined || val === null) return;
+      locks[id] = val; el.classList.add('locked');
+    }));
 
     // paint the slider's filled portion so its edge sits exactly at the THUMB
     // CENTER: the thumb travels [thumb/2 .. width-thumb/2], not the full track,
@@ -560,8 +624,11 @@
       const spellLine = c.spells.length
         ? `<br><span class="small">✨ ${spTheme.label || 'Class list'} — ${c.spells.length} spells (L0–${Math.max(...c.spells.map(s => s.lvl))})</span>` : '';
       const gearNames = c.gear.map(g => g.name + (g.qty > 1 ? ' ×' + g.qty : '')).join(', ');
+      const clsLine = picks.cls2
+        ? `${picks.cls} ${picks.level - picks.levels2} / ${picks.cls2} ${picks.levels2}`
+        : picks.cls;
       main.querySelector('#gen-result').innerHTML =
-        `<b>${picks.race} ${picks.cls}</b>, level ${picks.level} — ${alignLabel}<br>
+        `<b>${picks.race} ${clsLine}</b>, level ${picks.level} — ${alignLabel}<br>
          <span class="small">${finals}</span>
          <span class="small muted">(incl. racial mods${incr ? ' & +' + incr + ' level increases' : ''} — seed ${picks.seed})</span><br>
          <span class="small">🎯 ${theme.label || ''}${topSkills ? ' — ' + topSkills + '…' : ''}</span><br>
@@ -569,96 +636,131 @@
          <span class="small">🎒 ${gearNames || 'no gear'} — ${c.money.gp} gp banked</span>`;
     }
 
+    // park a reel on a muted informational label (no gold win styling)
+    const idleReel = (id, label) => {
+      const el = reel(id);
+      el.classList.remove('done');
+      const strip = el.querySelector('.gen-reel-strip');
+      strip.style.transition = 'none'; strip.style.transform = 'translateY(0)';
+      strip.innerHTML = `<div></div><div style="color:var(--muted,#888)">${label}</div><div></div>`;
+    };
+
     function spin() {
       const syn = parseInt(main.querySelector('#gen-syn').value, 10) / 100;
-      const seed = (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
+      const seedRaw = main.querySelector('#gen-seed').value.trim();
+      const seed = seedRaw !== '' && !isNaN(parseInt(seedRaw, 10))
+        ? (parseInt(seedRaw, 10) >>> 0)
+        : (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
       const rng = mulberry32(seed);
       picks = { seed };
+      spinning = true;
       spinBtn.disabled = true;
       saveBtn.style.display = 'none';
       main.querySelector('#gen-result').innerHTML = '';
 
-      // dependent reels spin in sequence… (a pinned level lands instantly)
-      const lvlChoice = main.querySelector('#gen-level').value;
-      const seq = [
-        { id: 'level',     label: 'level',     cands: () => levelCandidates(),        set: v => picks.level = v },
-        { id: 'race',      label: 'race',      cands: () => raceCandidates(),         set: v => picks.race = v },
-        { id: 'class',     label: 'class',     cands: () => classCandidates(picks),   set: v => picks.cls = v },
-        { id: 'alignment', label: 'alignment', cands: () => alignmentCandidates(picks), set: v => picks.alignment = v },
-      ];
-      if (lvlChoice !== 'roll') {
-        picks.level = parseInt(lvlChoice, 10);
-        landReel(reel('level'), 'Level ' + picks.level);
-        seq.shift();
-      }
-      let i = 0;
-      const next = () => {
-        if (i < seq.length) {
-          const st = seq[i++];
-          status.textContent = 'Rolling ' + st.label + '…';
-          const cands = st.cands();
-          const chosen = weightedPick(rng, cands);
-          spinReel(reel(st.id), cands, chosen, rng, () => { st.set(chosen.value); next(); });
-        } else spinAbilities();
+      // one reel step: honor a lock while its value is still legal, else spin.
+      // Locked steps consume no rng, so the same seed + same locks reproduce.
+      const runStep = (id, label, cands, set, dur, then) => {
+        if (locks[id] !== undefined) {
+          const hit = cands.find(x => x.value === locks[id]);
+          if (hit) { set(hit.value); landReel(reel(id), hit.label); then(); return; }
+          delete locks[id]; reel(id).classList.remove('locked');  // now illegal — re-roll
+        }
+        status.textContent = 'Rolling ' + label + '…';
+        const chosen = weightedPick(rng, cands);
+        spinReel(reel(id), cands, chosen, rng, () => { set(chosen.value); then(); }, { duration: dur });
       };
+
+      const lvlChoice = main.querySelector('#gen-level').value;
+      const stepLevel = () => {
+        if (lvlChoice !== 'roll') {
+          picks.level = parseInt(lvlChoice, 10);
+          landReel(reel('level'), 'Level ' + picks.level);
+          return stepRace();
+        }
+        runStep('level', 'level', levelCandidates(), v => picks.level = v, 1.25, stepRace);
+      };
+      const stepRace = () => runStep('race', 'race', raceCandidates(), v => picks.race = v, 1.25, stepClass);
+      const stepClass = () => runStep('class', 'class', classCandidates(picks), v => picks.cls = v, 1.25, stepClass2);
+      // small-chance multiclass — derived fresh each spin, not lockable
+      const stepClass2 = () => {
+        const mc = G().multiclass || {};
+        picks.cls2 = null; picks.levels2 = 0;
+        const cands = class2Candidates(picks);
+        const wants = picks.level >= (mc.minLevel || 4) && rng() < (mc.chance || 0) && cands.length;
+        if (!wants) { idleReel('class2', 'single class'); return stepAlignment(); }
+        status.textContent = 'Rolling second class…';
+        const chosen = weightedPick(rng, cands);
+        const lv2 = 1 + Math.floor(rng() * Math.floor(picks.level / 2));  // 1..half
+        spinReel(reel('class2'), cands, chosen, rng, () => {
+          picks.cls2 = chosen.value; picks.levels2 = lv2;
+          const winEl = reel('class2').querySelector('.win');
+          if (winEl) winEl.textContent = chosen.label + ' ' + lv2;        // show the split
+          stepAlignment();
+        }, { duration: 1.0 });
+      };
+      const stepAlignment = () => runStep('alignment', 'alignment', alignmentCandidates(picks), v => picks.alignment = v, 1.25, spinAbilities);
+
       // …the six ability reels only depend on the class, so they run together
       const spinAbilities = () => {
         status.textContent = 'Rolling abilities…';
         picks.abilities = {};
         let landed = 0;
+        const oneDone = () => { if (++landed === ABILITIES.length) stepSkillTheme(); };
         ABILITIES.forEach((ab, idx) => {
+          if (locks[ab] !== undefined) {
+            picks.abilities[ab] = locks[ab];
+            landReel(reel(ab), String(locks[ab]));
+            oneDone(); return;
+          }
           const cands = abilityCandidates(ab, picks.cls, syn);
           const chosen = weightedPick(rng, cands);
           setTimeout(() => spinReel(reel(ab), cands, chosen, rng, () => {
             picks.abilities[ab] = chosen.value;
-            if (++landed === ABILITIES.length) spinSkillTheme();
+            oneDone();
           }, { duration: 0.85 }), idx * 140);
         });
       };
-      const spinSkillTheme = () => {
-        status.textContent = 'Rolling skill focus…';
-        const cands = skillThemeCandidates(picks, syn);
-        const chosen = weightedPick(rng, cands);
-        spinReel(reel('skilltheme'), cands, chosen, rng, () => {
-          picks.skillTheme = chosen.value;
-          spinFeatBundle();
-        }, { duration: 1.0 });
-      };
-      const spinFeatBundle = () => {
-        status.textContent = 'Rolling feat path…';
+      const stepSkillTheme = () => runStep('skilltheme', 'skill focus',
+        skillThemeCandidates(picks, syn), v => picks.skillTheme = v, 1.0, stepFeatBundle);
+      const stepFeatBundle = () => {
         const cands = featBundleCandidates(picks, syn);
-        const chosen = weightedPick(rng, cands);
         // silently pre-roll a backup path so high-level builds that drain the
         // primary chain stay deterministic from picks alone
-        const rest = cands.filter(x => x.value !== chosen.value);
-        picks.featBundle2 = rest.length ? weightedPick(rng, rest).value : null;
+        const withBackup = primary => {
+          const rest = cands.filter(x => x.value !== primary);
+          picks.featBundle2 = rest.length ? weightedPick(rng, rest).value : null;
+        };
+        if (locks.featbundle !== undefined) {
+          const hit = cands.find(x => x.value === locks.featbundle);
+          if (hit) { picks.featBundle = hit.value; withBackup(hit.value);
+                     landReel(reel('featbundle'), hit.label); return stepSpellTheme(); }
+          delete locks.featbundle; reel('featbundle').classList.remove('locked');
+        }
+        status.textContent = 'Rolling feat path…';
+        const chosen = weightedPick(rng, cands);
+        withBackup(chosen.value);
         spinReel(reel('featbundle'), cands, chosen, rng, () => {
-          picks.featBundle = chosen.value;
-          spinSpellTheme();
+          picks.featBundle = chosen.value; stepSpellTheme();
         }, { duration: 1.0 });
       };
-      const spinSpellTheme = () => {
+      const stepSpellTheme = () => {
         const cands = spellPathCandidates(picks);
         if (!cands.length) {                  // non-caster (or themeless occult caster)
           picks.spellTheme = null;
-          // "class list" only if this class actually gets spells (Ninja is in
+          // "class list" only if a class actually gets spells (Ninja is in
           // the engine's caster table but has no spell list in the data)
-          const castsAnything = !!PF.spellSlots(baseCharacter(picks), picks.cls);
-          const strip = reel('spelltheme').querySelector('.gen-reel-strip');
-          strip.style.transition = 'none'; strip.style.transform = 'translateY(0)';
-          strip.innerHTML = '<div></div><div style="color:var(--muted,#888)">' +
-            (castsAnything ? 'class list' : 'no spellcasting') + '</div><div></div>';
-          finishSpin();
-          return;
+          const bc = baseCharacter(picks);
+          const castsAnything = !!PF.spellSlots(bc, picks.cls) ||
+            (picks.cls2 && !!PF.spellSlots(bc, picks.cls2));
+          idleReel('spelltheme', castsAnything ? 'class list' : 'no spellcasting');
+          return endSpin();
         }
-        status.textContent = 'Rolling spell path…';
-        const chosen = weightedPick(rng, cands);
-        spinReel(reel('spelltheme'), cands, chosen, rng, () => {
-          picks.spellTheme = chosen.value;
-          finishSpin();
-        }, { duration: 1.0 });
+        runStep('spelltheme', 'spell path', cands, v => picks.spellTheme = v, 1.0, endSpin);
       };
-      next();
+      const endSpin = () => { spinning = false; finishSpin(); };
+
+      stepLevel();
     }
 
     spinBtn.addEventListener('click', spin);
@@ -668,7 +770,7 @@
 
   window.PFGEN = { renderView, buildCharacter, legalAlignments, alignmentCandidates,
                    abilityCandidates, levelCandidates, raceCandidates, classCandidates,
-                   skillThemeCandidates, distributeSkills, featBundleCandidates,
-                   featAllowance, spellPathCandidates, assignSpells, applyGear,
-                   mulberry32, weightedPick };
+                   class2Candidates, skillThemeCandidates, distributeSkills,
+                   featBundleCandidates, featAllowance, spellPathCandidates,
+                   assignSpells, applyGear, mulberry32, weightedPick };
 })();
