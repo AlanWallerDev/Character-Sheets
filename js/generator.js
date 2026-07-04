@@ -426,11 +426,23 @@
   function spinReel(reelEl, candidates, chosen, rng, done, opts) {
     const dur = (opts && opts.duration) || 1.25;
     const strip = reelEl.querySelector('.gen-reel-strip');
-    const filler = () => candidates[Math.floor(rng() * candidates.length)].label;
+    // fillers never repeat the winner (a duplicate right next to the landing
+    // row gives the game away) and avoid back-to-back duplicates of each other
+    const pool = candidates.filter(x => x.value !== chosen.value);
+    let prev = null;
+    const filler = () => {
+      if (!pool.length) return '·';                // single-option reel
+      let pick, guard = 0;
+      do { pick = pool[Math.floor(rng() * pool.length)].label; }
+      while (pick === prev && pool.length > 1 && ++guard < 8);
+      prev = pick;
+      return pick;
+    };
     const rows = [];
     const pre = Math.min(22, Math.max(12, candidates.length));
     for (let i = 0; i < pre; i++) rows.push(filler());
     rows.push(chosen.label);                       // lands on center row
+    prev = chosen.label;                           // trailing rows differ from it too
     for (let i = 0; i < 4; i++) rows.push(filler()); // visible "almosts" below
     strip.innerHTML = rows.map((r, i) =>
       `<div${i === pre ? ' class="win"' : ''}>${r}</div>`).join('');
