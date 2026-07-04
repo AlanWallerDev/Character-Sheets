@@ -71,12 +71,14 @@ PFGENDATA.classProfiles = {
   Swashbuckler: { roll:true, keys:['dex','cha'],     role:'martial', defense:'light',  weapon:'finesse',    tags:['finesse','panache'] },
   Warpriest:    { roll:true, keys:['wis','str','con'], role:'divine', defense:'heavy',  weapon:'twoHanded', tags:['frontline','healer'], list:'Cleric' },
   // --- Occult / Unchained (rollable but lower default weight via rarity) ---
+  // (occult casters use their own class name as spell list — engine casterInfo
+  // derives it from the class's data casting block)
   Kineticist:   { roll:true, keys:['con','dex'],     role:'arcane',  defense:'light',  weapon:'none',       tags:['blaster'] },
-  Mesmerist:    { roll:true, keys:['cha','dex'],     role:'arcane',  defense:'light',  weapon:'finesse',    tags:['face','control'] },
-  Occultist:    { roll:true, keys:['int','str'],     role:'gish',    defense:'medium', weapon:'oneHand',    tags:['gish'] },
-  Psychic:      { roll:true, keys:['int','con'],     role:'arcane',  defense:'none',   weapon:'none',       tags:['control','blaster'] },
-  Spiritualist: { roll:true, keys:['wis','con'],     role:'divine',  defense:'light',  weapon:'oneHand',    tags:['pet','support'] },
-  Medium:       { roll:true, keys:['cha','wis'],     role:'divine',  defense:'medium', weapon:'oneHand',    tags:['support'] },
+  Mesmerist:    { roll:true, keys:['cha','dex'],     role:'arcane',  defense:'light',  weapon:'finesse',    tags:['face','control'], list:'Mesmerist' },
+  Occultist:    { roll:true, keys:['int','str'],     role:'gish',    defense:'medium', weapon:'oneHand',    tags:['gish'], list:'Occultist' },
+  Psychic:      { roll:true, keys:['int','con'],     role:'arcane',  defense:'none',   weapon:'none',       tags:['control','blaster'], list:'Psychic' },
+  Spiritualist: { roll:true, keys:['wis','con'],     role:'divine',  defense:'light',  weapon:'oneHand',    tags:['pet','support'], list:'Spiritualist' },
+  Medium:       { roll:true, keys:['cha','wis'],     role:'divine',  defense:'medium', weapon:'oneHand',    tags:['support'], list:'Medium' },
   Vigilante:    { roll:true, keys:['dex','cha'],     role:'skill',   defense:'light',  weapon:'finesse',    tags:['skill','face'] },
   Shifter:      { roll:true, keys:['wis','dex','str'], role:'nature', defense:'light',  weapon:'natural',   tags:['wild','natural'] },
   // Unchained dupes — off by default to avoid double-flavor rolls
@@ -228,6 +230,44 @@ PFGENDATA.featBundles = [
     favors:{str:1,wis:1,int:1}, minLevel:1, requiresCasting:true,
     feats:['Combat Casting','Power Attack','Weapon Focus','Toughness','Iron Will'] },
 
+  // --- Maneuvers & styles ---
+  { id:'reach-warden', label:'Polearm Sentinel', roles:['martial'], weapon:'reach',
+    favors:{str:2,int:1}, minLevel:1,
+    feats:['Combat Reflexes','Power Attack','Stand Still','Combat Expertise','Improved Trip','Greater Trip','Felling Smash','Lunge'] },
+
+  { id:'grappler', label:'Iron Clinch', classes:['Monk','Brawler','Fighter','Barbarian','Slayer'], weapon:'unarmed',
+    favors:{str:2,dex:1}, minLevel:1,
+    feats:['Improved Unarmed Strike','Improved Grapple','Greater Grapple','Rapid Grappler','Stunning Pin','Power Attack'] },
+
+  { id:'crane-style', label:'Crane Dancer', classes:['Monk','Brawler','Monk (Unchained)'], weapon:'unarmed',
+    favors:{dex:2,wis:1}, minLevel:1,
+    feats:['Improved Unarmed Strike','Dodge','Crane Style','Crane Wing','Crane Riposte','Combat Reflexes'] },
+
+  { id:'dragon-style', label:'Dragon Fury', classes:['Monk','Brawler','Monk (Unchained)'], weapon:'unarmed',
+    favors:{str:2}, minLevel:1,
+    feats:['Improved Unarmed Strike','Dragon Style','Dragon Ferocity','Power Attack','Toughness'] },
+
+  { id:'intimidator', label:'Dread Reaver', roles:['martial'], weapon:'twoHanded',
+    favors:{str:1,cha:2}, minLevel:1,
+    feats:['Weapon Focus','Intimidating Prowess','Power Attack','Dazzling Display','Cornugon Smash','Shatter Defenses'] },
+
+  { id:'critical-master', label:'Executioner', roles:['martial'], weapon:'oneHand',
+    favors:{str:1,dex:1}, minLevel:9,          // Critical Focus needs BAB +9
+    feats:['Weapon Focus','Critical Focus','Improved Critical','Bleeding Critical','Staggering Critical'] },
+
+  { id:'pack-tactician', label:'Pack Tactician', classes:['Inquisitor','Cavalier','Hunter','Samurai'], weapon:'oneHand',
+    favors:{wis:1,cha:1}, minLevel:1,          // these classes share/solo teamwork feats
+    feats:['Precise Strike','Outflank','Paired Opportunists','Lookout','Escape Route','Shake It Off'] },
+
+  // --- More caster paths ---
+  { id:'channeler', label:'Radiant Channel', classes:['Cleric','Oracle','Warpriest'], weapon:'oneHand',
+    favors:{cha:2,wis:1}, minLevel:1, requiresCasting:true,
+    feats:['Selective Channeling','Extra Channel','Improved Channel','Turn Undead','Quick Channel','Toughness'] },
+
+  { id:'metamagician', label:"Archmage's Craft", roles:['arcane'], weapon:'none',
+    favors:{int:2}, minLevel:1, requiresCasting:true,
+    feats:['Spell Focus','Spell Specialization','Intensified Spell','Elemental Focus','Greater Elemental Focus','Persistent Spell','Quicken Spell'] },
+
   // --- Fallback (NO gates) — the only bundle guaranteed eligible for every
   // class (occult non-casters are locked out of the requiresCasting bundles);
   // the pipeline also drains leftover slots from this chain when a rolled
@@ -270,32 +310,36 @@ PFGENDATA.spellThemes = {
       "Haste","Dispel Magic","Fly","Wall Of Fire","Ice Storm","Dimension Door","Invisibility, Greater",
       "Black Tentacles","Cone Of Cold","Cloudkill","Wall Of Force","Teleport","Feeblemind","Chain Lightning",
       "Disintegrate","Dispel Magic, Greater","Freezing Sphere","True Seeing","Delayed Blast Fireball",
-      "Prismatic Spray","Forcecage","Plane Shift","Polar Ray","Horrid Wilting","Maze","Moment Of Prescience",
-      "Meteor Swarm","Time Stop","Prismatic Sphere","Power Word Kill"] },
+      "Prismatic Spray","Forcecage","Grasping Hand","Spell Turning","Plane Shift","Polar Ray","Horrid Wilting",
+      "Shout, Greater","Clenched Fist","Scintillating Pattern","Sunburst","Maze","Moment Of Prescience",
+      "Meteor Swarm","Time Stop","Crushing Hand","Clashing Rocks","Tsunami","Prismatic Sphere",
+      "Power Word Kill","Wish"] },
     { id:"controller", label:"Enchanter — Control & Illusion", spells:[
       "Daze","Ghost Sound","Mage Hand","Charm Person","Grease","Color Spray","Enlarge Person","Mage Armor",
       "Glitterdust","Web","Invisibility","Hideous Laughter","Blur","Haste","Slow","Stinking Cloud","Hold Person",
       "Displacement","Black Tentacles","Confusion","Charm Monster","Dimension Door","Hold Monster",
       "Dominate Person","Feeblemind","Cloudkill","Wall Of Force","Suggestion, Mass","Dispel Magic, Greater",
       "Disintegrate","Flesh To Stone","Repulsion","Insanity","Reverse Gravity","Hold Person, Mass","Forcecage",
-      "Irresistible Dance","Maze","Mind Blank","Prismatic Wall","Dominate Monster","Wail Of The Banshee",
-      "Weird","Time Stop"] },
+      "Power Word Blind","Spell Turning","Irresistible Dance","Maze","Mind Blank","Binding","Power Word Stun",
+      "Charm Monster, Mass","Prismatic Wall","Dominate Monster","Wail Of The Banshee","Weird","Freedom",
+      "Imprisonment","Foresight","Mage's Disjunction","Time Stop"] },
     { id:"conjurer", label:"Conjurer — Summoning", spells:[
       "Acid Splash","Mage Hand","Summon Monster I","Mage Armor","Grease","Unseen Servant","Color Spray",
       "Summon Monster II","Web","Glitterdust","Acid Arrow","Create Pit","Summon Monster III","Stinking Cloud",
       "Sleet Storm","Phantom Steed","Summon Monster IV","Black Tentacles","Dimension Door","Solid Fog",
       "Summon Monster V","Cloudkill","Wall Of Stone","Teleport","Summon Monster VI","Acid Fog","Wall Of Iron",
-      "Planar Binding","Summon Monster VII","Forcecage","Plane Shift","Teleport, Greater","Summon Monster VIII",
-      "Maze","Incendiary Cloud","Planar Binding, Greater","Summon Monster IX","Gate","Teleportation Circle",
-      "Meteor Swarm"] },
+      "Planar Binding","Summon Monster VII","Forcecage","Plane Shift","Teleport, Greater","Limited Wish",
+      "Grasping Hand","Summon Monster VIII","Maze","Incendiary Cloud","Planar Binding, Greater","Clenched Fist",
+      "Trap The Soul","Summon Monster IX","Gate","Teleportation Circle","Crushing Hand","Astral Projection",
+      "Wish","Meteor Swarm"] },
     { id:"necromancer", label:"Necromancer — Death & Fear", spells:[
       "Disrupt Undead","Touch Of Fatigue","Bleed","Chill Touch","Ray Of Enfeeblement","Cause Fear","Mage Armor",
       "Shield","False Life","Command Undead","Blindness/Deafness","Spectral Hand","Scare","Vampiric Touch",
       "Ray Of Exhaustion","Animate Dead","Bestow Curse","Enervation","Fear","Contagion","Black Tentacles",
       "Waves Of Fatigue","Magic Jar","Blight","Feeblemind","Circle Of Death","Create Undead","Eyebite",
       "Undeath To Death","Finger Of Death","Waves Of Exhaustion","Control Undead","Horrid Wilting",
-      "Create Greater Undead","Clone","Trap The Soul","Wail Of The Banshee","Energy Drain","Soul Bind",
-      "Power Word Kill"] },
+      "Create Greater Undead","Symbol Of Death","Clone","Trap The Soul","Wail Of The Banshee","Energy Drain",
+      "Soul Bind","Astral Projection","Power Word Kill"] },
   ],
   // ===== DIVINE (Cleric / Oracle / Warpriest / Inquisitor) =====
   Cleric: [
@@ -306,21 +350,24 @@ PFGENDATA.spellThemes = {
       "Cure Critical Wounds","Restoration","Death Ward","Neutralize Poison","Freedom Of Movement",
       "Cure Light Wounds, Mass","Breath Of Life","Spell Resistance","Raise Dead","True Seeing",
       "Cure Moderate Wounds, Mass","Heal","Heroes' Feast","Cure Serious Wounds, Mass","Resurrection","Regenerate",
-      "Restoration, Greater","Cure Critical Wounds, Mass","Earthquake","Heal, Mass","True Resurrection","Miracle"] },
+      "Restoration, Greater","Ethereal Jaunt","Cure Critical Wounds, Mass","Holy Aura","Antimagic Field",
+      "Heal, Mass","True Resurrection","Gate","Miracle"] },
     { id:"war", label:"War Priest — Buff & Smite", spells:[
       "Guidance","Light","Resistance","Divine Favor","Bless","Shield Of Faith","Doom","Protection From Evil",
       "Spiritual Weapon","Bull's Strength","Aid","Sound Burst","Hold Person","Magic Vestment","Prayer",
       "Searing Light","Dispel Magic","Bestow Curse","Divine Power","Holy Smite","Spiritual Ally","Air Walk",
       "Restoration","Righteous Might","Flame Strike","Slay Living","Spell Resistance","True Seeing","Blade Barrier",
-      "Harm","Heal","Bull's Strength, Mass","Dispel Magic, Greater","Destruction","Fire Storm","Holy Word",
-      "Summon Monster VII","Earthquake","Implosion","Storm Of Vengeance","Gate"] },
+      "Harm","Heal","Bull's Strength, Mass","Dispel Magic, Greater","Destruction","Word Of Chaos","Dictum",
+      "Repulsion","Fire Storm","Holy Word","Summon Monster VII","Holy Aura","Antimagic Field","Frightful Aspect",
+      "Earthquake","Implosion","Winds Of Vengeance","Storm Of Vengeance","Miracle","Gate"] },
     { id:"shadow", label:"Death Priest — Debuff & Undeath", spells:[
       "Bleed","Guidance","Detect Magic","Resistance","Bane","Cause Fear","Doom","Inflict Light Wounds",
       "Protection From Good","Death Knell","Hold Person","Desecrate","Inflict Moderate Wounds","Silence",
       "Animate Dead","Bestow Curse","Inflict Serious Wounds","Contagion","Searing Light","Inflict Critical Wounds",
       "Unholy Blight","Poison","Death Ward","Freedom Of Movement","Slay Living","Inflict Light Wounds, Mass",
       "Plane Shift","Harm","Create Undead","Blade Barrier","Word Of Recall","Destruction","Blasphemy",
-      "Create Greater Undead","Unholy Aura","Antimagic Field","Energy Drain","Implosion"] },
+      "Repulsion","Create Greater Undead","Symbol Of Death","Unholy Aura","Antimagic Field","Frightful Aspect",
+      "Energy Drain","Astral Projection","Implosion","Gate"] },
   ],
   // ===== NATURE (Druid / Ranger / Hunter) =====
   Druid: [
@@ -330,22 +377,23 @@ PFGENDATA.spellThemes = {
       "Call Lightning","Sleet Storm","Protection From Energy","Ice Storm","Flame Strike","Cure Serious Wounds",
       "Air Walk","Wall Of Thorns","Call Lightning Storm","Stoneskin","Baleful Polymorph","Fire Seeds","Sirocco",
       "Wall Of Stone","Dispel Magic, Greater","Fire Storm","Sunbeam","Heal","Animate Plants","Sunburst",
-      "Whirlwind","Earthquake","Storm Of Vengeance","Elemental Swarm"] },
+      "Whirlwind","Earthquake","Clashing Rocks","Tsunami","Winds Of Vengeance","World Wave",
+      "Storm Of Vengeance","Elemental Swarm"] },
     { id:"warden", label:"Wild Warden — Battlefield", spells:[
       "Detect Magic","Guidance","Know Direction","Resistance","Entangle","Longstrider","Goodberry",
       "Cure Light Wounds","Faerie Fire","Spike Growth","Barkskin","Hold Animal","Stone Call","Fog Cloud",
       "Spike Stones","Sleet Storm","Call Lightning","Remove Disease","Command Plants","Ice Storm",
       "Cure Serious Wounds","Freedom Of Movement","Wall Of Thorns","Baleful Polymorph","Stoneskin","Tree Stride",
       "Wall Of Stone","Stone Tell","Dispel Magic, Greater","Cure Light Wounds, Mass","Heal","Creeping Doom",
-      "Animate Plants","Repel Metal Or Stone","Animal Shapes","Earthquake","Shambler","World Wave",
-      "Storm Of Vengeance"] },
+      "Animate Plants","Repel Metal Or Stone","Animal Shapes","Earthquake","Shambler","Regenerate",
+      "Foresight","Tsunami","Summon Nature's Ally IX","World Wave","Storm Of Vengeance"] },
     { id:"beastmaster", label:"Beastmaster — Summon & Shape", spells:[
       "Detect Magic","Guidance","Light","Stabilize","Summon Nature's Ally I","Magic Fang","Charm Animal",
       "Cure Light Wounds","Summon Nature's Ally II","Barkskin","Dominate Animal","Summon Nature's Ally III",
       "Magic Fang, Greater","Summon Nature's Ally IV","Animal Growth","Cure Serious Wounds",
       "Summon Nature's Ally V","Tree Stride","Summon Nature's Ally VI","Stone Tell","Summon Nature's Ally VII",
-      "Heal","Animate Plants","Summon Nature's Ally VIII","Animal Shapes","Summon Nature's Ally IX","Shapechange",
-      "Elemental Swarm"] },
+      "Heal","Animate Plants","Creeping Doom","Summon Nature's Ally VIII","Animal Shapes","Frightful Aspect",
+      "Summon Nature's Ally IX","Shapechange","Regenerate","Elemental Swarm"] },
   ],
   // ===== RANGER (own list, spell levels 1-4) =====
   Ranger: [
@@ -387,9 +435,10 @@ PFGENDATA.spellThemes = {
       "Daze","Detect Magic","Touch Of Fatigue","Light","Ill Omen","Mage Armor","Charm Person","Sleep","Command",
       "Hold Person","Web","Blindness/Deafness","False Life","Bestow Curse","Vampiric Touch","Dispel Magic",
       "Stinking Cloud","Confusion","Black Tentacles","Charm Monster","Hold Monster","Dominate Person","Feeblemind",
-      "Baleful Polymorph","Dispel Magic, Greater","Suggestion, Mass","Slay Living","Insanity","Hold Person, Mass",
-      "Irresistible Dance","Horrid Wilting","Trap The Soul","Dominate Monster","Wail Of The Banshee",
-      "Power Word Kill"] },
+      "Baleful Polymorph","Dispel Magic, Greater","Suggestion, Mass","Slay Living","Chain Lightning",
+      "Regenerate","Insanity","Hold Person, Mass","Power Word Blind","Irresistible Dance","Horrid Wilting",
+      "Symbol Of Death","Frightful Aspect","Trap The Soul","Dominate Monster","Wail Of The Banshee",
+      "Foresight","Summon Monster IX","Astral Projection","Power Word Kill"] },
     { id:"plaguebringer", label:"Plaguebringer — Curse & Decay", spells:[
       "Bleed","Touch Of Fatigue","Detect Magic","Daze","Ray Of Enfeeblement","Cause Fear","Chill Touch",
       "Mage Armor","Blindness/Deafness","Death Knell","False Life","Frostbite","Bestow Curse","Vampiric Touch",
@@ -461,8 +510,9 @@ PFGENDATA.spellThemes = {
       "Guidance","Detect Magic","Stabilize","Light","Bane","Cause Fear","Inflict Light Wounds","Cure Light Wounds",
       "Doom","Hold Person","Spiritual Weapon","Frostbite","Inflict Moderate Wounds","Bestow Curse","Call Lightning",
       "Magic Vestment","Inflict Serious Wounds","Divine Power","Fear","Ice Storm","Cure Critical Wounds",
-      "Slay Living","Flame Strike","Baleful Polymorph","Harm","Heal","Dispel Magic, Greater","Fire Storm",
-      "Horrid Wilting","Sunburst","Wail Of The Banshee","Storm Of Vengeance"] },
+      "Slay Living","Flame Strike","Baleful Polymorph","Harm","Heal","Dispel Magic, Greater","Regenerate",
+      "Fire Storm","Horrid Wilting","Whirlwind","Sunburst","Wail Of The Banshee","Foresight","Shapechange",
+      "Tsunami","Winds Of Vengeance","Storm Of Vengeance"] },
     { id:"mender", label:"Mender — Heal & Restore", spells:[
       "Guidance","Stabilize","Detect Magic","Resistance","Cure Light Wounds","Bless","Protection From Evil",
       "Remove Fear","Cure Moderate Wounds","Restoration, Lesser","Aid","Remove Paralysis","Resist Energy",
@@ -470,6 +520,78 @@ PFGENDATA.spellThemes = {
       "Divine Power","Neutralize Poison","Cure Light Wounds, Mass","Breath Of Life","Heal","Restoration, Greater",
       "Cure Moderate Wounds, Mass","Cure Serious Wounds, Mass","Regenerate","Cure Critical Wounds, Mass",
       "Heal, Mass"] },
+  ],
+  // ===== OCCULT CLASSES (own lists via engine casterInfo) =====
+  Psychic: [
+    { id:"telepath", label:"Telepath — Charm & Dominate", spells:[
+      "Daze","Message","Mage Hand","Detect Magic","Charm Person","Command","Color Spray","Detect Thoughts",
+      "Calm Emotions","Blindness/Deafness","Deep Slumber","Heroism","Dispel Magic","Charm Monster","Confusion",
+      "Dimension Door","Dominate Person","Hold Monster","Feeblemind","Mind Fog","Disintegrate","True Seeing",
+      "Ethereal Jaunt","Insanity","Mind Blank","Power Word Blind","Limited Wish","Irresistible Dance",
+      "Power Word Stun","Maze","Charm Monster, Mass","Dominate Monster","Foresight","Power Word Kill",
+      "Time Stop"] },
+    { id:"seer", label:"Seer — Divination & Force", spells:[
+      "Detect Magic","Know Direction","Ghost Sound","Light","Alarm","Comprehend Languages","Detect Secret Doors",
+      "Blur","Augury","Detect Thoughts","Clairaudience/Clairvoyance","Arcane Sight","Displacement","Fly",
+      "Arcane Eye","Divination","Dimensional Anchor","Black Tentacles","Contact Other Plane","Major Creation",
+      "Hold Monster","Analyze Dweomer","Find The Path","Contingency","Grasping Hand","Antimagic Field",
+      "Forcecage","Clenched Fist","Moment Of Prescience","Discern Location","Crushing Hand","Foresight",
+      "Freedom","Gate","Astral Projection","Wish"] },
+  ],
+  Mesmerist: [
+    { id:"dominator", label:"Dominator — Gaze & Command", spells:[
+      "Daze","Lullaby","Message","Detect Magic","Charm Person","Command","Cause Fear","Color Spray","Enthrall",
+      "Daze Monster","Detect Thoughts","Blindness/Deafness","Charm Monster","Deep Slumber","Confusion","Fear",
+      "Dominate Person","Hold Monster","Modify Memory","Feeblemind","Mind Fog","Nightmare","Insanity",
+      "Hold Person, Mass","Charm Monster, Mass","Irresistible Dance","Power Word Blind"] },
+    { id:"illusionist", label:"Illusionist — Veils & Shadows", spells:[
+      "Ghost Sound","Dancing Lights","Prestidigitation","Detect Magic","Disguise Self","Color Spray","Faerie Fire",
+      "Blur","Glitterdust","Alter Self","Displacement","Invisibility Sphere","Glibness","Crushing Despair",
+      "Hallucinatory Terrain","Phantasmal Killer","Dimension Door","Freedom Of Movement","Mislead",
+      "Shadow Evocation","Shadow Walk","Persistent Image","Seeming","Mirage Arcana","Permanent Image",
+      "Project Image","Invisibility, Mass","True Seeing","Programmed Image"] },
+  ],
+  Occultist: [
+    { id:"reliquarian", label:"Reliquarian — Battle Relics", spells:[
+      "Guidance","Light","Mending","Detect Magic","Cure Light Wounds","Command","Burning Hands","Alarm",
+      "Cure Moderate Wounds","False Life","Flaming Sphere","Find Traps","Fireball","Cure Serious Wounds",
+      "Dispel Magic","Displacement","Haste","Call Lightning","Cure Critical Wounds","Death Ward",
+      "Dimension Door","Fire Shield","Air Walk","Cone Of Cold","Overland Flight","Dominate Person",
+      "Blade Barrier","Disintegrate","Chain Lightning","Antimagic Field","Contingency","Heal"] },
+    { id:"haunt-collector", label:"Haunt Collector — Dark Curios", spells:[
+      "Bleed","Daze","Ghost Sound","Detect Magic","Cause Fear","Charm Person","Comprehend Languages","Darkness",
+      "Darkvision","False Life","Augury","Animate Dead","Bestow Curse","Deeper Darkness","Deep Slumber","Fear",
+      "Confusion","Break Enchantment","Contact Other Plane","Dismissal","Inflict Light Wounds, Mass","Mislead",
+      "Persistent Image","Mind Fog","Symbol Of Death","Charm Monster, Mass","Antipathy","Analyze Dweomer",
+      "Forbiddance","Globe Of Invulnerability","Freezing Sphere"] },
+  ],
+  Spiritualist: [
+    { id:"shepherd", label:"Shepherd — Ward & Mend", spells:[
+      "Guidance","Stabilize","Light","Detect Magic","Cure Light Wounds","Endure Elements","Doom","Deathwatch",
+      "Aid","Cure Moderate Wounds","Augury","Invisibility","Levitate","Cure Serious Wounds","Dispel Magic",
+      "Heroism","Fly","Haste","Cure Critical Wounds","Death Ward","Freedom Of Movement","Dimension Door",
+      "Breath Of Life","Break Enchantment","Dismissal","Dominate Person","Heal","Banishment","Find The Path",
+      "Mislead","Repulsion"] },
+    { id:"ectoplasmatist", label:"Ectoplasmatist — Grave Touch", spells:[
+      "Bleed","Daze","Mage Hand","Detect Magic","Chill Touch","Cause Fear","Alarm","Death Knell","Ghoul Touch",
+      "Inflict Moderate Wounds","Detect Thoughts","False Life","Blindness/Deafness","Bestow Curse","Animate Dead",
+      "Inflict Serious Wounds","Displacement","Enervation","Fear","Black Tentacles","Confusion",
+      "Inflict Critical Wounds","Dominate Person","Feeblemind","Nightmare","Dream","Circle Of Death","Eyebite",
+      "Harm","Create Undead","Disintegrate","Repulsion"] },
+  ],
+  // Medium's list thins out fast above level 4 (one L5, three L6 spells in the
+  // data) — themes lean on levels 0-4 and the back-fill covers the rest
+  Medium: [
+    { id:"spirit-champion", label:"Spirit Champion — Legend's Might", spells:[
+      "Guidance","Light","Detect Magic","Resistance","Enlarge Person","Command","Expeditious Retreat",
+      "Protection From Evil","Aid","Bull's Strength","Bear's Endurance","False Life","Alter Self","Haste",
+      "Dispel Magic","Fly","Displacement","Magic Circle Against Evil","Death Ward","Freedom Of Movement",
+      "Hold Monster","Fear","Dismissal","Planar Binding, Lesser"] },
+    { id:"spirit-oracle", label:"Spirit Oracle — Whispers Beyond", spells:[
+      "Daze","Message","Ghost Sound","Detect Magic","Comprehend Languages","Identify","Deathwatch",
+      "Disguise Self","Augury","Detect Thoughts","Clairaudience/Clairvoyance","Darkvision","Blur","Divination",
+      "Discern Lies","Dream","Dimension Door","Locate Creature","Legend Lore","Modify Memory","Nightmare",
+      "False Vision","Feeblemind","Break Enchantment"] },
   ],
 };
 
@@ -481,6 +603,7 @@ PFGENDATA.spellThemes = {
  * ------------------------------------------------------------------------- */
 PFGENDATA.gearKits = {
   twoHanded:  { weapons:['Greatsword','Greataxe','Falchion'],            misc:['Backpack'] },
+  reach:      { weapons:['Glaive','Longspear','Dagger'],                 misc:['Backpack'] },
   oneHand:    { weapons:['Longsword','Warhammer','Battleaxe'],           misc:['Backpack'] },
   'sword-board':{ weapons:['Longsword','Heavy Steel Shield','Warhammer'], misc:['Backpack'] },
   twoWeapon:  { weapons:['Shortsword','Shortsword','Kukri'],             misc:['Backpack'] },
