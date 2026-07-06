@@ -26,7 +26,12 @@
       if (!other || (mine.updated || 0) >= (other.updated || 0)) byId.set(mine.id, mine);
     }
     for (const id of deletedIds) byId.delete(id);
-    characters = [...byId.values()].map(patch);
+    // patch() only entries adopted from storage. Re-sanitizing our own
+    // in-memory objects would rebuild their nested structures (play, gear,
+    // companions…) and orphan the references live views hold on them — the
+    // next handler would then mutate a dead object and silently lose the edit.
+    const ours = new Set(characters);
+    characters = [...byId.values()].map(x => ours.has(x) ? x : patch(x));
     try {
       localStorage.setItem(STORE, JSON.stringify(characters));
     } catch (err) {
@@ -54,7 +59,7 @@
     const blob = new Blob([JSON.stringify(c, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = (c.name || 'character').replace(/[^\w\- ]/g, '').trim() + '.json';
+    a.download = ((c.name || 'character').replace(/[^\w\- ]/g, '').trim() || 'character') + '.json';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -62,7 +67,10 @@
   window.addEventListener('storage', e => {
     if (e.key !== STORE) return;
     try { characters = (JSON.parse(e.newValue || '[]')).map(patch); } catch (err) { return; }
-    if (state.view === 'roster') render();
+    // re-render whatever view is open, not just the roster: open views hold
+    // references into the replaced array, so without a re-render every
+    // subsequent edit would mutate an orphaned object and be lost on save.
+    render();
   });
 
   // narrow = sidebar becomes an overlay drawer instead of an inline column
@@ -120,8 +128,11 @@
     if (b.scales) out.scales = true;
     return out;
   }
+  // weight: keep "unknown" as null (not 0) so gearWeight() can fall back to the
+  // item database — coercing to 0 would silently zero out imported gear.
   const sanGear = g => ({ name: toStr(g.name), kind: toStr(g.kind) || 'item', qty: toInt(g.qty, 1),
-    equipped: !!g.equipped, cost: toStr(g.cost), weight: toNum(g.weight), note: toStr(g.note),
+    equipped: !!g.equipped, cost: toStr(g.cost),
+    weight: (g.weight == null || g.weight === '') ? null : toNum(g.weight), note: toStr(g.note),
     enh: toInt(g.enh), mw: !!g.mw, special: toStr(g.special), dmgBonus: toStr(g.dmgBonus) });
   const sanRollLine = l => ({ d20: toInt(l.d20), mod: toInt(l.mod), total: toInt(l.total),
     dmg: toStr(l.dmg), bonus: toStr(l.bonus) });
@@ -446,7 +457,14 @@
       const r = new FileReader();
       r.onload = () => {
         try {
-          const c = patch(JSON.parse(r.result));
+          const raw = JSON.parse(r.result);
+          // patch() would coerce anything into an empty "Unnamed" character —
+          // reject files that clearly aren't a single-character export instead
+          if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
+              (typeof raw.name !== 'string' && !raw.abilities && !raw.levels)) {
+            throw new Error('this is not a character export (expected a single character\'s JSON object)');
+          }
+          const c = patch(raw);
           c.id = 'pc_' + Date.now().toString(36);
           characters.push(c); save(); render();
         } catch (err) { uiAlert('Could not read character file: ' + err.message, { title: 'Import failed' }); }
@@ -1108,20 +1126,11 @@
 
     // attack lines from equipped weapons (using buffed stats); ammo excluded, tracked below
     const weaponRows = c.gear.filter(g => g.kind === 'weapon' && !PF.gearIsAmmo(g)).map(g => {
-      const w = PF.getWeapon(g.name);
-      const mw = PF.magicWeapon(g);
-      const ranged = PF.isRangedWeapon(w);
-      const abM = ranged ? PF.abilityMod(e, 'dex') : PF.abilityMod(e, PF.meleeAttackAbility(e, w));
-      const atkMod = t.bab + abM + sizeM + mw.atk + (e.combat.miscAttack || 0);
-      const dmgMod = (ranged && !PF.isThrownWeapon(w) ? 0 : PF.abilityMod(e, 'str')) + mw.dmg + (e.combat.miscDamage || 0);
-      const dice = w && /\d*d\d+/.test(w.dmgM) ? w.dmgM.match(/\d*d\d+/)[0] + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : '') : null;
-      const name = PF.gearDisplayName(g);
-      const single = rollChip(name, atkMod, dice, mw.dmgBonus);
+      const wa = PF.weaponAttack(e, g);
+      const single = rollChip(wa.name, wa.mods[0], wa.dice, wa.mw.dmgBonus);
       // once BAB grants iteratives, offer a full-attack chip alongside the single attack
-      const iters = PF.iterAttacks(t.bab);
-      if (iters.length > 1) {
-        const mods = iters.map(b => b + abM + sizeM + mw.atk + (e.combat.miscAttack || 0));
-        return single + ' ' + fullAttackChip(name + ' (full)', mods, dice, mw.dmgBonus);
+      if (wa.mods.length > 1) {
+        return single + ' ' + fullAttackChip(wa.name + ' (full)', wa.mods, wa.dice, wa.mw.dmgBonus);
       }
       return single;
     }).join(' ');
@@ -1272,8 +1281,10 @@
             <label class="small">Temp HP <input class="tiny" type="number" id="hp-temp" value="${p.hpTemp || 0}"></label>
             <label class="small">Nonlethal <input class="tiny" type="number" id="hp-nl" value="${p.nonlethal || 0}"></label>
           </div>
-          ${hp.current <= 0 ? `<p class="err"><b>${hp.current <= -PF.abilityScore(c, 'con') ? 'Dead' : hp.current < 0 ? 'Dying' : 'Disabled'}</b></p>` : ''}
-          ${p.nonlethal >= hp.current && hp.current > 0 ? '<p class="warn">Unconscious (nonlethal ≥ current HP)</p>' : ''}
+          ${hp.current <= 0 ? `<p class="err"><b>${hp.current <= -PF.abilityScore(e, 'con') ? 'Dead' : hp.current < 0 ? 'Dying' : 'Disabled'}</b></p>` : ''}
+          ${hp.current > 0 && (p.nonlethal || 0) > 0 ? (
+            p.nonlethal > hp.current ? '<p class="warn">Unconscious (nonlethal exceeds current HP)</p>'
+            : p.nonlethal === hp.current ? '<p class="warn">Staggered (nonlethal equals current HP)</p>' : '') : ''}
           ${(() => {
             const carry = PF.carryCapacity(e), load = PF.gearWeight(c);
             const tier = load > carry.heavy ? '<span class="err">over capacity</span>'
@@ -1694,7 +1705,7 @@
       Library.pickModal('racialTraits', 'Alternate Racial Traits — ' + c.race, t => {
         if (!c.altTraits.includes(t.name)) c.altTraits.push(t.name);
         save(); render();
-      }, { race: singularRace(c.race) }));
+      }, { race: c.race }));
     main.querySelectorAll('[data-deltrait]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
       c.altTraits = c.altTraits.filter(x => x !== a.dataset.deltrait);
@@ -1702,13 +1713,14 @@
     }));
     attachRefPopovers(main, c);
   }
-  function singularRace(name) { return name; }
 
   // ----- classes -----
   function tabClasses(main, c) {
     const playable = PFDATA.classes.filter(x => ['core', 'base', 'hybrid'].includes(x.subtype));
     const others = PFDATA.classes.filter(x => !['core', 'base', 'hybrid'].includes(x.subtype));
-    // keep the dropdown on the last-used class across re-renders (adding multiple levels)
+    // keep the dropdown on the last-used class across re-renders (adding
+    // multiple levels) — but per character, so it doesn't leak between them
+    if (state.clsSelFor !== c.id) { delete state.clsSel; state.clsSelFor = c.id; }
     const selCls = state.clsSel || (c.levels.length ? c.levels[c.levels.length - 1].cls : null);
     const opt = x => `<option ${x.name === selCls ? 'selected' : ''}>${esc(x.name)}</option>`;
     const clsOptions = `<optgroup label="Core / Base / Hybrid">${playable.map(opt).join('')}</optgroup>
@@ -1884,6 +1896,9 @@
       for (const n of names) skillRows.push({ name: n, sk: PFDATA.skills.find(s => s.name === base) });
     }
     skillRows.sort((a, b) => a.name.localeCompare(b.name));
+    // totals through the same engine path the sheet/Play tab use (permanent
+    // feature bonuses + skillMiscAll included), so the tabs can't disagree
+    const eff = PF.effective(c, { buffs: false });
 
     main.innerHTML = `<h2>Skills</h2>${statBar(c)}
       <div class="panel">
@@ -1900,15 +1915,14 @@
             const natural = PF.isClassSkill(c, name, true);
             const isCs = natural || (c.classSkillExtra || []).includes(name);
             const ab = (sk && sk.ability) || 'int';
-            const total = ranks + PF.abilityMod(c, ab) + (isCs && ranks > 0 ? 3 : 0) +
-              (parseInt(c.skillMisc[name], 10) || 0) + (sk && sk.acp ? PF.armorCheckPenalty(c) : 0);
+            const total = PF.skillBonus(eff, name, ab);
             return `<tr>
               <td>${esc(name)}${sk && sk.trained ? '<span class="muted small" title="trained only">*</span>' : ''}${sk && sk.custom ? ' <span class="pill gold" style="font-size:.7em">HB</span>' : ''}</td>
               <td class="num"><b>${fmt(total)}</b></td>
               <td class="num"><input class="tiny" type="number" min="0" max="${maxRanks}" data-rank="${esc(name)}" value="${ranks || ''}"></td>
               <td class="num"><input type="checkbox" data-csk="${esc(name)}" ${isCs ? 'checked' : ''} ${natural ? 'disabled' : ''}
                 title="${natural ? 'class skill (from your classes)' : 'mark as class skill (trait, archetype, homebrew)'}"></td>
-              <td class="num">${ab.toUpperCase()} ${fmt(PF.abilityMod(c, ab))}</td>
+              <td class="num">${ab.toUpperCase()} ${fmt(PF.abilityMod(eff, ab))}</td>
               <td class="num"><input class="tiny" type="number" data-misc="${esc(name)}" value="${c.skillMisc[name] || ''}"></td>
               <td>${name.includes('(any)') ? `<button class="small" data-spec="${esc(name.split(' (')[0])}">name it</button>` : ''}</td>
             </tr>`;
@@ -1945,8 +1959,6 @@
 
   // ----- feats & traits -----
   function tabFeats(main, c) {
-    const lvl = c.levels.length;
-    const baseFeats = Math.max(0, Math.ceil(lvl / 2));
     // standard rule: at most one trait per category. Count categories to flag dupes.
     const traitCat = {};
     c.traits.forEach(tn => { const tr = PFDATA.traits.find(x => x.name === tn); if (tr && tr.category) traitCat[tr.category] = (traitCat[tr.category] || 0) + 1; });
@@ -1955,12 +1967,9 @@
     const drawbacks = c.traits.filter(tn => { const tr = PFDATA.traits.find(x => x.name === tn); return tr && tr.category === 'Drawback'; }).length;
     const regularTraits = c.traits.length - drawbacks;
     const traitsAllowed = 2 + drawbacks;
-    // feat allowance: base (1 + 1/odd level) + class bonus feats + a racial bonus feat
-    let classBonusFeats = 0;
-    for (const grp of PF.classFeatures(c)) for (const f of grp.features) if (/^bonus feat/i.test(f.name)) classBonusFeats += f.levels.length;
-    const featRace = PF.getRace(c.race);
-    const racialBonusFeats = featRace && (featRace.traits || []).some(t => /bonus feat/i.test(t.name)) ? 1 : 0;
-    const featsAllowed = baseFeats + classBonusFeats + racialBonusFeats;
+    const fa = PF.featAllowance(c);
+    const baseFeats = fa.base, classBonusFeats = fa.classBonus, racialBonusFeats = fa.racial;
+    const featsAllowed = fa.total;
     main.innerHTML = `<h2>Feats & Traits</h2>${statBar(c)}
       <div class="row">
         <div class="panel">
@@ -2454,7 +2463,10 @@
              ['speedMisc', 'Speed misc (ft)']].map(([k, l]) =>
             `<label class="small">${l} <input class="tiny" type="number" data-cb="${k}" value="${c.combat[k] || 0}"></label>`).join('')}
         </div>
-        <p class="small muted">Use these for buffs, magic items, class features and feats that the sheet doesn't compute automatically (rings of protection, amulets of natural armor, Dodge, Iron Will…).</p>
+        <p class="small muted">Use these for magic items and effects the sheet doesn't compute automatically
+        (rings of protection, amulets of natural armor, cloaks of resistance…). Flat bonuses printed in your
+        feats and traits — Dodge, Iron Will and the like — are already applied automatically (the sheet lists
+        them under the stat blocks), so don't enter those here too.</p>
       </div>
       <div class="panel">
         ${field('Adventure notes', `<textarea id="nt-notes" rows="8" style="width:100%">${esc(c.notes)}</textarea>`)}

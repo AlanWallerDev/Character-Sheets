@@ -30,7 +30,12 @@
 <meta name="twitter:title" content="Pathfinder 1e Character Vault">
 <meta name="twitter:description" content="Free Pathfinder 1st Edition character creator & manager — full rules database, play tracker, printable & PDF sheets.">
 
-<link rel="stylesheet" href="css/styles.css?v=16">
+<!-- One APP_VERSION busts the HTTP cache for the stylesheet and every script
+     at the bottom of the page. Bump it after ANY css/, js/ or data/ change —
+     individual files no longer carry their own ?v= numbers. -->
+<script>var APP_VERSION = 60;
+document.write('<link rel="stylesheet" href="css/styles.css?v=' + APP_VERSION + '">');</script>
+<noscript><link rel="stylesheet" href="css/styles.css"></noscript>
 </head>
 <body>
 <div id="app">
@@ -47,33 +52,22 @@
 
 <div id="modal-root"></div>
 
-<!-- Compiled PRD data (Paizo OGL content via PSRD-Data) -->
-<script src="data/skills.js?v=3"></script>
-<script src="data/races.js?v=3"></script>
-<script src="data/racialtraits.js?v=3"></script>
-<script src="data/classes.js?v=4"></script>
-<script src="data/archetypes.js?v=3"></script>
-<script src="data/classabilities.js?v=2"></script>
-<script src="data/mythicabilities.js?v=1"></script>
-<script src="data/mythicpaths.js?v=2"></script>
-<script src="data/mythicspells.js?v=1"></script>
-<script src="data/feats.js?v=4"></script>
-<script src="data/spells.js?v=7"></script>
-<script src="data/weapons.js?v=3"></script>
-<script src="data/armors.js?v=3"></script>
-<script src="data/items.js?v=3"></script>
-<script src="data/traits.js?v=4"></script>
-<script src="data/companions.js?v=3"></script>
-<script src="data/buffs.js?v=1"></script>
-<script src="data/bundles.js?v=7"></script>
-
-<script src="vendor/jspdf.umd.min.js"></script>
-<script src="js/engine.js?v=36"></script>
-<script src="js/library.js?v=13"></script>
-<script src="js/custom.js?v=4"></script>
-<script src="js/pdf.js?v=7"></script>
-<script src="js/sheet.js?v=22"></script>
-<script src="js/generator.js?v=15"></script>
-<script src="js/app.js?v=54"></script>
+<!-- Compiled PRD data (Paizo OGL content via PSRD-Data), then the app modules.
+     document.write keeps the tags parser-blocking, so load order is preserved;
+     every URL gets the single APP_VERSION defined in <head>. -->
+<script>
+[
+  'data/skills.js', 'data/races.js', 'data/racialtraits.js', 'data/classes.js',
+  'data/archetypes.js', 'data/classabilities.js', 'data/mythicabilities.js',
+  'data/mythicpaths.js', 'data/mythicspells.js', 'data/feats.js', 'data/spells.js',
+  'data/weapons.js', 'data/armors.js', 'data/items.js', 'data/traits.js',
+  'data/companions.js', 'data/buffs.js', 'data/bundles.js',
+  'vendor/jspdf.umd.min.js',
+  'js/engine.js', 'js/library.js', 'js/custom.js', 'js/pdf.js', 'js/sheet.js',
+  'js/generator.js', 'js/app.js',
+].forEach(function (src) {
+  document.write('<script src="' + src + '?v=' + APP_VERSION + '"><\/script>');
+});
+</script>
 </body>
 </html>

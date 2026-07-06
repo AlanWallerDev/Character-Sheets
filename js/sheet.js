@@ -74,17 +74,10 @@ const Sheet = (() => {
     if (weapons.length) {
       h += `<h3>Attacks</h3><table class="data"><tr><th>Weapon</th><th>Attack</th><th>Damage</th><th>Critical</th><th>Type</th></tr>`;
       for (const g of weapons) {
-        const w = PF.getWeapon(g.name);
-        const mw = PF.magicWeapon(g);
-        const ranged = PF.isRangedWeapon(w);
-        const abM = ranged ? PF.abilityMod(c, 'dex') : PF.abilityMod(c, PF.meleeAttackAbility(c, w));
-        const sizeM = PF.SIZE_MOD[(race && race.size) || 'Medium'] || 0;
-        const atk = PF.iterAttacks(t.bab).map(b => fmt(b + abM + sizeM + mw.atk + (c.combat.miscAttack || 0))).join('/');
-        const dmgMod = (ranged && !PF.isThrownWeapon(w) ? 0 : PF.abilityMod(c, 'str')) + mw.dmg;
-        const dmgText = (w ? w.dmgM : '—') + (dmgMod ? ' ' + fmt(dmgMod) : '') + (mw.dmgBonus ? ' + ' + mw.dmgBonus : '');
-        h += `<tr><td>${ref('gear', g.name, PF.gearDisplayName(g))}</td><td>${atk}</td>
-          <td>${esc(dmgText)}</td>
-          <td>${esc(w ? w.crit : '')}</td><td>${esc(w ? w.dtype : '')}</td></tr>`;
+        const wa = PF.weaponAttack(c, g);
+        h += `<tr><td>${ref('gear', g.name, wa.name)}</td><td>${wa.mods.map(fmt).join('/')}</td>
+          <td>${esc(wa.dmgText)}</td>
+          <td>${esc(wa.crit)}</td><td>${esc(wa.dtype)}</td></tr>`;
       }
       h += '</table>';
     }

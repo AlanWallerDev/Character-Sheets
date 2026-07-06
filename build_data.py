@@ -1152,10 +1152,11 @@ def load_nedb(name):
     if not os.path.exists(path):
         return []
     out = []
-    for line in open(path, encoding='utf-8'):
-        line = line.strip()
-        if line:
-            out.append(json.loads(line))
+    with open(path, encoding='utf-8') as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                out.append(json.loads(line))
     return out
 
 
@@ -1484,7 +1485,8 @@ def extract_foundry_classes(existing_classes):
     out = []
     import glob as _glob
     for path in sorted(_glob.glob(os.path.join(FOUNDRY_YAML, 'classes', '*.yaml'))):
-        d = yaml.safe_load(open(path, encoding='utf-8'))
+        with open(path, encoding='utf-8') as fh:
+            d = yaml.safe_load(fh)
         name = d.get('name', '').strip()
         if not name or name.lower() in have:
             continue
@@ -1637,10 +1639,15 @@ def extract_pfu_feats(existing):
     path = os.path.join(PFU, 'feats.js')
     if not os.path.exists(path):
         return []
-    raw = open(path, encoding='utf-8').read()
+    with open(path, encoding='utf-8') as fh:
+        raw = fh.read()
     manuals = []
     man_path = os.path.join(PFU, 'manuals.js')
-    man_raw = open(man_path, encoding='utf-8').read() if os.path.exists(man_path) else raw
+    if os.path.exists(man_path):
+        with open(man_path, encoding='utf-8') as fh:
+            man_raw = fh.read()
+    else:
+        man_raw = raw
     mm = re.search(r'var manuals = `(.*?)`', man_raw, re.S)
     if mm:
         manuals = [l.strip() for l in mm.group(1).strip().split('\n')]
@@ -1649,7 +1656,8 @@ def extract_pfu_feats(existing):
     tables = []
     tbl_path = os.path.join(PFU, 'tables.js')
     if os.path.exists(tbl_path):
-        tbl_raw = open(tbl_path, encoding='utf-8').read()
+        with open(tbl_path, encoding='utf-8') as fh:
+            tbl_raw = fh.read()
         tables = [t.replace('´´´', '"').strip()
                   for t in re.findall(r'`(.*?)`', tbl_raw, re.S)]
 

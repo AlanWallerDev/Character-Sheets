@@ -148,7 +148,6 @@ const PDF = (() => {
     const sv = PF.saves(c);
     const cm = PF.combatManeuvers(c);
     const race = PF.getRace(c.race);
-    const sizeM = PF.SIZE_MOD[(race && race.size) || 'Medium'] || 0;
     const init = PF.abilityMod(c, 'dex') + (c.combat.miscInit || 0);
     const classesStr = [...PF.classLevels(c)].map(([k, v]) => k + ' ' + v).join(' / ') || '—';
 
@@ -189,14 +188,8 @@ const PDF = (() => {
     if (weapons.length) {
       sectionHeader('Attacks');
       const rows = weapons.map(g => {
-        const w = PF.getWeapon(g.name);
-        const mw = PF.magicWeapon(g);
-        const ranged = PF.isRangedWeapon(w);
-        const abM = ranged ? PF.abilityMod(c, 'dex') : PF.abilityMod(c, PF.meleeAttackAbility(c, w));
-        const atk = PF.iterAttacks(t.bab).map(b => fmt(b + abM + sizeM + mw.atk + (c.combat.miscAttack || 0))).join('/');
-        const dmgMod = (ranged && !PF.isThrownWeapon(w) ? 0 : PF.abilityMod(c, 'str')) + mw.dmg;
-        const dmg = (w ? w.dmgM : '—') + (dmgMod ? ' ' + fmt(dmgMod) : '') + (mw.dmgBonus ? ' + ' + mw.dmgBonus : '');
-        return [PF.gearDisplayName(g), atk, dmg, w ? w.crit : '', w ? w.dtype : ''];
+        const wa = PF.weaponAttack(c, g);
+        return [wa.name, wa.mods.map(fmt).join('/'), wa.dmgText, wa.crit, wa.dtype];
       });
       table(['Weapon', 'Attack', 'Damage', 'Crit', 'Type'], rows,
         [0.40, 0.20, 0.22, 0.10, 0.08], ['left', 'left', 'left', 'left', 'left']);

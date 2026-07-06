@@ -4,8 +4,7 @@
 
 const Custom = (() => {
   const STORE = 'pf1e.vault.custom';
-  const esc = s => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const esc = Library.esc;   // custom.js loads after library.js (see index.html)
 
   const splitList = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
   const para = s => s ? '<p>' + esc(s).replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>') + '</p>' : '';

@@ -29,7 +29,7 @@ body {
 h1, h2, h3, h4 { font-family: 'Palatino Linotype', Palatino, Georgia, serif; color: var(--accent); margin: .4em 0; }
 h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: .2em; }
 h3 { font-size: 1.15em; color: #d8b95a; }
-h4 { font-size: 1em; color: #d0a; color: #c8b07a; }
+h4 { font-size: 1em; color: #c8b07a; }
 a { color: var(--link); }
 
 button, .btn {

@@ -419,6 +419,20 @@ const PF = (() => {
     return c.feats.some(f => (f.name || f) === name);
   }
 
+  // Feat allowance: base (one at 1st + every odd level) + class "Bonus feat"
+  // features + a racial bonus feat (human). Single source of truth for the
+  // Feats tab's counter and the generator's budget.
+  function featAllowance(c) {
+    const base = Math.max(0, Math.ceil(c.levels.length / 2));
+    let classBonus = 0;
+    for (const grp of classFeatures(c)) {
+      for (const f of grp.features) if (/^bonus feat/i.test(f.name)) classBonus += f.levels.length;
+    }
+    const race = getRace(c.race);
+    const racial = race && (race.traits || []).some(t => /bonus feat/i.test(t.name)) ? 1 : 0;
+    return { base, classBonus, racial, total: base + classBonus + racial };
+  }
+
   // ---------- skills ----------
   function classSkillSet(c) {
     const set = new Set();
@@ -509,6 +523,29 @@ const PF = (() => {
     const spec = (g.special || '').trim();
     const specPart = spec ? spec + ' ' : '';
     return prefix + specPart + g.name;
+  }
+
+  // Shared weapon attack line — the Play tab, sheet view and PDF all render
+  // from this so their to-hit/damage math can't drift. `c` is usually an
+  // effective() character (buffed for Play, features-only for sheet/PDF).
+  // -> { name, ranged, mods:[per-iterative to-hit], dice:'1d8+3'|null (rollable),
+  //      dmgText:'1d8 +3 + 1d6 fire', crit, dtype, mw }
+  function weaponAttack(c, g) {
+    const w = getWeapon(g.name);
+    const mw = magicWeapon(g);
+    const race = getRace(c.race);
+    const sizeM = SIZE_MOD[(race && race.size) || 'Medium'] || 0;
+    const ranged = isRangedWeapon(w);
+    const abM = ranged ? abilityMod(c, 'dex') : abilityMod(c, meleeAttackAbility(c, w));
+    const perAttack = abM + sizeM + mw.atk + (c.combat.miscAttack || 0);
+    const mods = iterAttacks(totals(c).bab).map(b => b + perAttack);
+    const dmgMod = (ranged && !isThrownWeapon(w) ? 0 : abilityMod(c, 'str')) + mw.dmg + (c.combat.miscDamage || 0);
+    const dm = w && /\d*d\d+/.exec(w.dmgM || '');
+    const dice = dm ? dm[0] + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : '') : null;
+    const dmgText = (w ? w.dmgM : '—') + (dmgMod ? ' ' + (dmgMod > 0 ? '+' + dmgMod : dmgMod) : '') +
+      (mw.dmgBonus ? ' + ' + mw.dmgBonus : '');
+    return { name: gearDisplayName(g), ranged, mods, dice, dmgText,
+             crit: (w && w.crit) || '', dtype: (w && w.dtype) || '', mw };
   }
 
   function armorCheckPenalty(c) {
@@ -608,6 +645,10 @@ const PF = (() => {
     return { cmb, cmd };
   }
 
+  // armor/encumbrance-reduced speed for any base: drop a third, round up to 5
+  // (matches the book table: 20→15, 30→20, 40→30, 50→35, 60→40)
+  const reducedSpeed = b => Math.ceil((b * 2 / 3) / 5) * 5;
+
   function speed(c) {
     const race = getRace(c.race);
     const base = (race && race.speed) || 30;
@@ -617,14 +658,14 @@ const PF = (() => {
     if (!steady) {
       for (const { a } of equippedArmor(c)) {
         if (/medium|heavy/i.test(a.group)) {
-          slowed = base === 30 ? num(a.spd30) || 20 : (base === 20 ? num(a.spd20) || 15 : base);
+          slowed = base === 30 ? num(a.spd30) || 20 : (base === 20 ? num(a.spd20) || 15 : reducedSpeed(base));
           break;
         }
       }
       // a medium/heavy load slows you like medium armor; armor and encumbrance
       // penalties don't stack — the worse one applies
       if (gearWeight(c) > carryCapacity(c).light) {
-        slowed = Math.min(slowed, base === 30 ? 20 : base === 20 ? 15 : base);
+        slowed = Math.min(slowed, reducedSpeed(base));
       }
     }
     return slowed + (c.combat.speedMisc || 0);
@@ -1485,14 +1526,14 @@ const PF = (() => {
   return {
     ABILITIES, ABILITY_NAMES, CASTERS, POINT_BUY_COST, SIZE_MOD,
     mod, newCharacter, racialMods, abilityScore, abilityMod, pointBuyCost,
-    classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat,
+    classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat, featAllowance,
     classFeatures, parseArchetype, getArchetype, classFeatureHTML, archetypeFeatureHTML,
     racialTraits, getRacialTrait, limitedResources,
     MYTHIC_PATHS, getMythicPath, getMythicAbility, getMythicSpell, isMythic, mythicSurgeDie, mythicPowerUses, mythicUniversalFeatures,
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
-    isFinesseWeapon, meleeAttackAbility, isThrownWeapon,
+    isFinesseWeapon, meleeAttackAbility, isThrownWeapon, weaponAttack,
     carryCapacity, gearWeight, casterInfo, spellOnClassList, bonusSlots, spellSlots, spellsKnownRow, spellDC,
     totalGold, num,
     getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,

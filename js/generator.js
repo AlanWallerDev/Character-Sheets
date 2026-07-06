@@ -204,15 +204,10 @@
   }
 
   // ---------- feat bundles ----------
-  // Mirror the Feats tab's allowance math exactly (app.js tabFeats):
-  // ceil(level/2) base + class "Bonus feat" features + racial bonus feat.
+  // Same allowance the Feats tab shows — both call PF.featAllowance so the
+  // generator can't hand out more feats than the tab accepts.
   function featAllowance(c) {
-    let n = Math.max(0, Math.ceil(c.levels.length / 2));
-    for (const grp of PF.classFeatures(c)) for (const f of grp.features)
-      if (/^bonus feat/i.test(f.name)) n += f.levels.length;
-    const race = PF.getRace(c.race);
-    if (race && (race.traits || []).some(t => /bonus feat/i.test(t.name))) n += 1;
-    return n;
+    return PF.featAllowance(c).total;
   }
 
   function bundleEligible(b, picks) {

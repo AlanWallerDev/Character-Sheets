@@ -137,31 +137,33 @@ const Library = (() => {
     });
   }
 
+  // Everything here is injected via innerHTML, and homebrew entries carry raw
+  // user text in these fields — escape every branch, not just the risky-looking ones.
   function rowMeta(type, x) {
     switch (type) {
-      case 'feats': return x.types.join(', ') + ' — ' + x.source;
+      case 'feats': return esc(x.types.join(', ') + ' — ' + x.source);
       case 'spells': return esc(x.school) + ' ' + esc(x.levelText || Object.entries(x.levels).map(([c, l]) => c + ' ' + l).join(', ')).slice(0, 70);
-      case 'items': return [x.category, x.price].filter(Boolean).join(' — ');
-      case 'archetypes': return x.class + ' — ' + x.source;
-      case 'classAbilities': return (x.classes || []).join(', ') + (x.kind ? ' (' + x.kind + ')' : '');
-      case 'mythicAbilities': return x.path + (x.tier ? ' — Tier ' + x.tier : '');
-      case 'mythicPaths': return 'Mythic Path — ' + (x.source || '');
-      case 'mythicSpells': return 'Mythic version of ' + (x.base || x.name);
-      case 'traits': return x.category + ' — ' + x.source;
-      case 'racialTraits': return x.race + ' — ' + x.source;
-      case 'weapons': return `${x.prof}, ${x.dmgM} ${x.crit}` + (x.cost ? ', ' + x.cost : '');
-      case 'armors': return `${x.group} — AC ${x.bonus}, ${x.cost}`;
-      case 'classes': return x.subtype + ' — ' + x.source;
-      case 'races': return x.subtype + ' — ' + x.source;
-      case 'skills': return (x.ability || '').toUpperCase() + (x.trained ? ' — trained only' : '');
-      case 'companionSpecies': return [x.base && x.base.size, x.base && x.base.attack, x.source].filter(Boolean).join(' — ');
-      case 'familiarSpecies': return [x.size, x.melee, x.source].filter(Boolean).join(' — ');
+      case 'items': return esc([x.category, x.price].filter(Boolean).join(' — '));
+      case 'archetypes': return esc(x.class + ' — ' + x.source);
+      case 'classAbilities': return esc((x.classes || []).join(', ') + (x.kind ? ' (' + x.kind + ')' : ''));
+      case 'mythicAbilities': return esc(x.path + (x.tier ? ' — Tier ' + x.tier : ''));
+      case 'mythicPaths': return esc('Mythic Path — ' + (x.source || ''));
+      case 'mythicSpells': return esc('Mythic version of ' + (x.base || x.name));
+      case 'traits': return esc(x.category + ' — ' + x.source);
+      case 'racialTraits': return esc(x.race + ' — ' + x.source);
+      case 'weapons': return esc(`${x.prof}, ${x.dmgM} ${x.crit}` + (x.cost ? ', ' + x.cost : ''));
+      case 'armors': return esc(`${x.group} — AC ${x.bonus}, ${x.cost}`);
+      case 'classes': return esc(x.subtype + ' — ' + x.source);
+      case 'races': return esc(x.subtype + ' — ' + x.source);
+      case 'skills': return esc((x.ability || '').toUpperCase() + (x.trained ? ' — trained only' : ''));
+      case 'companionSpecies': return esc([x.base && x.base.size, x.base && x.base.attack, x.source].filter(Boolean).join(' — '));
+      case 'familiarSpecies': return esc([x.size, x.melee, x.source].filter(Boolean).join(' — '));
       case 'buffs': case 'conditions':
-        return changesText(x.changes)
+        return esc(changesText(x.changes))
           || esc([x.school, x.levelText].filter(Boolean).join(' ')).slice(0, 70)
-          || (x.note || '').slice(0, 60)
+          || esc((x.note || '').slice(0, 60))
           || '(no auto-effects — add manually)';
-      default: return x.source || '';
+      default: return esc(x.source || '');
     }
   }
 
