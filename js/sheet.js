@@ -55,9 +55,9 @@ const Sheet = (() => {
       <span class="stat-big"><span class="v">${fmt(t.bab)}</span><span class="l">BAB</span></span>
       <span class="stat-big"><span class="v">${fmt(cm.cmb)}</span><span class="l">CMB</span></span>
       <span class="stat-big"><span class="v">${cm.cmd}</span><span class="l">CMD</span></span>
-      <span class="stat-big roller" data-roll-label="Fortitude" data-roll-mod="${sv.fort}" title="click to roll"><span class="v">${fmt(sv.fort)}</span><span class="l">Fortitude</span></span>
-      <span class="stat-big roller" data-roll-label="Reflex" data-roll-mod="${sv.ref}" title="click to roll"><span class="v">${fmt(sv.ref)}</span><span class="l">Reflex</span></span>
-      <span class="stat-big roller" data-roll-label="Will" data-roll-mod="${sv.will}" title="click to roll"><span class="v">${fmt(sv.will)}</span><span class="l">Will</span></span>
+      <span class="stat-big roller" role="button" tabindex="0" data-roll-label="Fortitude" data-roll-mod="${sv.fort}" title="click to roll"><span class="v">${fmt(sv.fort)}</span><span class="l">Fortitude</span></span>
+      <span class="stat-big roller" role="button" tabindex="0" data-roll-label="Reflex" data-roll-mod="${sv.ref}" title="click to roll"><span class="v">${fmt(sv.ref)}</span><span class="l">Reflex</span></span>
+      <span class="stat-big roller" role="button" tabindex="0" data-roll-label="Will" data-roll-mod="${sv.will}" title="click to roll"><span class="v">${fmt(sv.will)}</span><span class="l">Will</span></span>
     </div>`;
     if (fchg.length) {
       const LBL = { str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha',
@@ -94,7 +94,7 @@ const Sheet = (() => {
         const ab = PF.skillAbility(name);
         const isCs = PF.isClassSkill(c, name);
         h += `<tr><td>${ref('skills', name)}${isCs ? ' <span class="muted small">(class)</span>' : ''}</td>
-          <td class="num roller" data-roll-label="${esc(name)}" data-roll-mod="${PF.skillBonus(c, name)}" title="click to roll"><b>${fmt(PF.skillBonus(c, name))}</b></td>
+          <td class="num roller" role="button" tabindex="0" data-roll-label="${esc(name)}" data-roll-mod="${PF.skillBonus(c, name)}" title="click to roll"><b>${fmt(PF.skillBonus(c, name))}</b></td>
           <td class="num">${r}</td><td class="num">${ab.toUpperCase()} ${fmt(PF.abilityMod(c, ab))}</td>
           <td class="num">${(parseInt(c.skillMisc[name], 10) || 0) + (isCs && r > 0 ? 3 : 0)}</td></tr>`;
       }

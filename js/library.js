@@ -451,6 +451,27 @@ const Library = (() => {
   }
 
   // ---------------- picker modal ----------------
+  // Shared dialog keyboard behavior for every modal in the app (app.js openModal,
+  // custom.js formModal, pickModal below): Escape closes the TOP-MOST dialog,
+  // Tab cycles inside it. Returns a cleanup-aware close — callers must use the
+  // returned function instead of their raw close, or the key listener leaks.
+  function modalKeys(overlay, close) {
+    const onKey = e => {
+      if (!overlay.parentNode || overlay !== overlay.parentNode.lastElementChild) return;
+      if (e.key === 'Escape') { e.preventDefault(); doClose(); return; }
+      if (e.key !== 'Tab') return;
+      const els = [...overlay.querySelectorAll('button, [href], input, select, textarea')]
+        .filter(el => !el.disabled && el.offsetParent !== null);
+      if (!els.length) return;
+      const first = els[0], last = els[els.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    const doClose = () => { document.removeEventListener('keydown', onKey); close(); };
+    document.addEventListener('keydown', onKey);
+    return doClose;
+  }
+
   function pickModal(type, title, onPick, presets) {
     const root = document.getElementById('modal-root');
     const overlay = document.createElement('div');
@@ -460,7 +481,7 @@ const Library = (() => {
       <div class="m-body" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
     </div>`;
     root.appendChild(overlay);
-    const close = () => root.removeChild(overlay);
+    const close = modalKeys(overlay, () => root.removeChild(overlay));
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     overlay.querySelector('#m-close').addEventListener('click', close);
     render(overlay.querySelector('.m-body'), {
@@ -468,8 +489,10 @@ const Library = (() => {
       onPick: (entry, state) => { onPick(entry, state); close(); },
       pickLabel: 'Add',
     });
+    const q = overlay.querySelector('[data-f=q]');
+    if (q) q.focus();
     return { close };
   }
 
-  return { render, pickModal, detailHTML, esc, TYPES, changesText };
+  return { render, pickModal, modalKeys, detailHTML, esc, TYPES, changesText };
 })();

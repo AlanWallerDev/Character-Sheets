@@ -300,16 +300,16 @@
       ${(!state.sidebarHidden && isNarrow()) ? '<div class="sb-backdrop no-print"></div>' : ''}
       <div class="sidebar ${state.sidebarHidden ? 'collapsed' : ''}">
         <div class="logo">Pathfinder 1e<small>Character Vault</small></div>
-        <div class="nav-item sb-hide" id="sb-hide">« Hide menu</div>
-        <div class="nav-item ${state.view === 'roster' ? 'active' : ''}" data-nav="roster">⚔ Characters</div>
+        <div class="nav-item sb-hide" id="sb-hide" role="button" tabindex="0">« Hide menu</div>
+        <div class="nav-item ${state.view === 'roster' ? 'active' : ''}" data-nav="roster" role="button" tabindex="0">⚔ Characters</div>
         ${c ? `
           <div style="padding:8px 18px 2px;color:var(--accent);font-size:.9em;border-top:1px solid var(--border);margin-top:6px">${esc(c.name)}</div>
           ${builderTabs.map(([k, l]) =>
-            `<div class="nav-item sub ${state.view === 'builder' && state.builderTab === k ? 'active' : ''}" data-tab="${k}">${l}</div>`).join('')}
-          <div class="nav-item sub ${state.view === 'sheet' ? 'active' : ''}" data-nav="sheet">📜 Character Sheet</div>
+            `<div class="nav-item sub ${state.view === 'builder' && state.builderTab === k ? 'active' : ''}" data-tab="${k}" role="button" tabindex="0">${l}</div>`).join('')}
+          <div class="nav-item sub ${state.view === 'sheet' ? 'active' : ''}" data-nav="sheet" role="button" tabindex="0">📜 Character Sheet</div>
         ` : ''}
-        <div class="nav-item ${state.view === 'library' ? 'active' : ''}" data-nav="library" style="border-top:1px solid var(--border);margin-top:6px">📚 Rules Library</div>
-        <div class="nav-item ${state.view === 'credits' ? 'active' : ''}" data-nav="credits">⚖ License &amp; Credits</div>
+        <div class="nav-item ${state.view === 'library' ? 'active' : ''}" data-nav="library" role="button" tabindex="0" style="border-top:1px solid var(--border);margin-top:6px">📚 Rules Library</div>
+        <div class="nav-item ${state.view === 'credits' ? 'active' : ''}" data-nav="credits" role="button" tabindex="0">⚖ License &amp; Credits</div>
         <div class="spacer"></div>
         <a class="coffee-link no-print" href="https://buymeacoffee.com/reddevelopment" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
         <div class="foot">Open Game Content under the OGL v1.0a. Your characters are stored only in this browser.</div>
@@ -325,6 +325,10 @@
       el.addEventListener('click', () => { state.view = el.dataset.nav; if (isNarrow()) state.sidebarHidden = true; render(); }));
     app.querySelectorAll('[data-tab]').forEach(el =>
       el.addEventListener('click', () => { state.view = 'builder'; state.builderTab = el.dataset.tab; if (isNarrow()) state.sidebarHidden = true; render(); }));
+    // the nav is divs, not buttons — make Enter/Space activate them for keyboard users
+    app.querySelectorAll('.nav-item').forEach(el => el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+    }));
 
     const main = $('#main');
     try {
@@ -554,22 +558,11 @@
       </div>` + Sheet.render(c);
     attachRefPopovers(main, c);
     // click-to-roll on saves and skills; result shows as a toast and lands in the Play log
-    main.querySelectorAll('.roller').forEach(el => el.addEventListener('click', () => {
-      const entry = logRoll(c, el.dataset.rollLabel, parseInt(el.dataset.rollMod, 10) || 0);
-      let toast = document.getElementById('roll-toast');
-      if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'roll-toast';
-        document.body.appendChild(toast);
-      }
-      toast.innerHTML = `<b>${esc(entry.label)}</b>: ${entry.d20} ${entry.mod >= 0 ? '+' : ''}${entry.mod} =
-        <b style="font-size:1.3em">${entry.total}</b>
-        ${entry.d20 === 20 ? ' — natural 20!' : entry.d20 === 1 ? ' — natural 1' : ''}`;
-      toast.className = entry.d20 === 20 ? 'nat20' : entry.d20 === 1 ? 'nat1' : '';
-      toast.style.display = 'block';
-      clearTimeout(toast._t);
-      toast._t = setTimeout(() => { toast.style.display = 'none'; }, 3500);
-    }));
+    main.querySelectorAll('.roller').forEach(el => {
+      const roll = () => showRollToast(logRoll(c, el.dataset.rollLabel, parseInt(el.dataset.rollMod, 10) || 0));
+      el.addEventListener('click', roll);
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); roll(); } });
+    });
     $('#print-btn').addEventListener('click', () => window.print());
     $('#back-btn').addEventListener('click', () => { state.view = 'builder'; render(); });
     $('#pdf-btn').addEventListener('click', async () => {
@@ -670,10 +663,14 @@
       pop.addEventListener('mouseleave', () => {
         pop._hideT = setTimeout(() => { pop.style.display = 'none'; }, 150);
       });
+      // tap/click anywhere else closes it — touch devices never fire mouseout
+      document.addEventListener('click', e => {
+        if (pop.style.display === 'none') return;
+        if (e.target.closest('#ref-popover') || e.target.closest('.ref')) return;
+        pop.style.display = 'none';
+      });
     }
-    container.addEventListener('mouseover', e => {
-      const t = e.target.closest('.ref');
-      if (!t) return;
+    const show = t => {
       clearTimeout(pop._hideT);
       const html = refDetailHTML(t.dataset.rt, t.dataset.rn, t.dataset.rx, ctx);
       if (!html) return;
@@ -692,6 +689,18 @@
       }
       pop.style.left = Math.max(12, x) + 'px';
       pop.style.top = y + 'px';
+    };
+    container.addEventListener('mouseover', e => {
+      const t = e.target.closest('.ref');
+      if (t) show(t);
+    });
+    // click/tap opens too — hover doesn't exist on touch screens, and the rules
+    // database shouldn't be desktop-only
+    container.addEventListener('click', e => {
+      const t = e.target.closest('.ref');
+      if (!t) return;
+      e.preventDefault();
+      show(t);
     });
     container.addEventListener('mouseout', e => {
       if (!e.target.closest('.ref')) return;
@@ -727,6 +736,30 @@
     return el;
   }
 
+  // plain-language derivations for tooltips, so a reduced or boosted number
+  // ("why is my AC 20?", "why is my speed 20?") never looks like a bug
+  function acTitleText(e, ac) {
+    const cb = e.combat;
+    return ['10 base',
+      ac.armor ? '+' + ac.armor + ' armor' : '',
+      ac.shield ? '+' + ac.shield + ' shield' : '',
+      ac.dex ? (ac.dex > 0 ? '+' : '') + ac.dex + ' Dex' + (isFinite(ac.maxDex) && ac.dex === ac.maxDex ? ' (capped by armor)' : '') : '',
+      ac.sizeMod ? (ac.sizeMod > 0 ? '+' : '') + ac.sizeMod + ' size' : '',
+      cb.naturalArmor ? '+' + cb.naturalArmor + ' natural' : '',
+      cb.deflection ? '+' + cb.deflection + ' deflection' : '',
+      cb.dodge ? '+' + cb.dodge + ' dodge' : '',
+      cb.miscAC ? (cb.miscAC > 0 ? '+' : '') + cb.miscAC + ' misc' : '',
+    ].filter(Boolean).join(' ');
+  }
+  function speedTitleText(sb) {
+    if (sb.steady) return sb.base + ' ft — never slowed by armor or encumbrance';
+    let t = sb.base + ' ft base';
+    if (sb.reasons.length) t += ' → ' + sb.slowed + ' ft (' +
+      sb.reasons.map(r => r === 'armor' ? 'medium/heavy armor' : 'carried load').join(' & ') + ')';
+    if (sb.misc) t += (sb.misc > 0 ? ', +' : ', ') + sb.misc + ' misc';
+    return t;
+  }
+
   function statBar(c) {
     const e = PF.effective(c, { buffs: false });   // include permanent trait/feature bonuses
     const t = PF.totals(e);
@@ -736,7 +769,7 @@
     return `<div class="panel" style="display:flex;flex-wrap:wrap;align-items:center;gap:2px">
       <span class="stat-big"><span class="v">${c.levels.length}</span><span class="l">Level</span></span>
       <span class="stat-big"><span class="v">${hp.total}</span><span class="l">HP</span></span>
-      <span class="stat-big"><span class="v">${ac.total}</span><span class="l">AC</span></span>
+      <span class="stat-big" title="${esc(acTitleText(e, ac))}"><span class="v">${ac.total}</span><span class="l">AC</span></span>
       <span class="stat-big"><span class="v">${fmt(t.bab)}</span><span class="l">BAB</span></span>
       <span class="stat-big"><span class="v">${fmt(sv.fort)}</span><span class="l">Fort</span></span>
       <span class="stat-big"><span class="v">${fmt(sv.ref)}</span><span class="l">Ref</span></span>
@@ -816,6 +849,37 @@
     return entry;
   }
 
+  // one toast for every roll source (sheet rollers AND Play-tab chips) so the
+  // result is visible even when the roll log is off-screen (phones, especially)
+  function showRollToast(entry) {
+    let toast = document.getElementById('roll-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'roll-toast';
+      document.body.appendChild(toast);
+    }
+    let html, cls = '';
+    if (entry.full) {
+      html = `<b>${esc(entry.label)}</b>: ` + entry.lines.map(l =>
+        `<b style="font-size:1.15em">${l.total}</b>${l.dmg ? ` <span class="muted small">(${esc(l.dmg)})</span>` : ''}`).join(' / ');
+      cls = entry.lines.some(l => l.d20 === 20) ? 'nat20' : entry.lines.some(l => l.d20 === 1) ? 'nat1' : '';
+    } else if (entry.pure) {
+      html = `<b>${esc(entry.label)}</b>: <b style="font-size:1.3em">${entry.total}</b>` +
+        (entry.breakdown ? ` <span class="muted small">${esc(entry.breakdown)}</span>` : '');
+    } else {
+      html = `<b>${esc(entry.label)}</b>: ${entry.d20} ${entry.mod >= 0 ? '+' : ''}${entry.mod} =
+        <b style="font-size:1.3em">${entry.total}</b>
+        ${entry.d20 === 20 ? ' — natural 20!' : entry.d20 === 1 ? ' — natural 1' : ''}` +
+        (entry.extra ? `<div class="small muted">${esc(entry.extra)}</div>` : '');
+      cls = entry.d20 === 20 ? 'nat20' : entry.d20 === 1 ? 'nat1' : '';
+    }
+    toast.innerHTML = html;
+    toast.className = cls;
+    toast.style.display = 'block';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.style.display = 'none'; }, 3500);
+  }
+
   function rollChip(label, mod, extra, bonusDice) {
     return `<button class="small roll-chip" data-roll-label="${esc(label)}" data-roll-mod="${mod}"
       ${extra ? `data-roll-dice="${esc(extra)}"` : ''}${bonusDice ? ` data-roll-bonus="${esc(bonusDice)}"` : ''}>${esc(label)} ${fmt(mod)}</button>`;
@@ -852,7 +916,7 @@
       <h3><button class="modal-close" id="mdl-x">${esc(opts.closeLabel || 'Cancel')}</button>${esc(title)}</h3>
       <div id="mdl-body">${bodyHTML}</div></div>`;
     root.appendChild(overlay);
-    const close = () => { if (overlay.parentNode) root.removeChild(overlay); };
+    const close = Library.modalKeys(overlay, () => { if (overlay.parentNode) root.removeChild(overlay); });
     overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
     overlay.querySelector('#mdl-x').addEventListener('click', close);
     return { overlay, close, body: overlay.querySelector('#mdl-body') };
@@ -1258,21 +1322,21 @@
     main.innerHTML = `<h2>▶ Play — ${esc(c.name)}</h2>
       <div class="panel" style="display:flex;flex-wrap:wrap;align-items:center;gap:2px">
         <span class="stat-big"><span class="v ${hpClass}">${hp.current}${hp.temp ? '+' + hp.temp : ''}</span><span class="l">HP / ${hp.max}</span></span>
-        <span class="stat-big"><span class="v">${ac.total}</span><span class="l">AC (T ${ac.touch} / FF ${ac.flat})</span></span>
+        <span class="stat-big" title="${esc(acTitleText(e, ac))}"><span class="v">${ac.total}</span><span class="l">AC (T ${ac.touch} / FF ${ac.flat})</span></span>
         <span class="stat-big"><span class="v">${fmt(init)}</span><span class="l">Init</span></span>
         <span class="stat-big"><span class="v">${fmt(sv.fort)}</span><span class="l">Fort</span></span>
         <span class="stat-big"><span class="v">${fmt(sv.ref)}</span><span class="l">Ref</span></span>
         <span class="stat-big"><span class="v">${fmt(sv.will)}</span><span class="l">Will</span></span>
         <span class="stat-big"><span class="v">${fmt(cm.cmb)}</span><span class="l">CMB</span></span>
         <span class="stat-big"><span class="v">${cm.cmd}</span><span class="l">CMD</span></span>
-        <span class="stat-big"><span class="v">${PF.speed(e)}</span><span class="l">Speed</span></span>
+        ${(() => { const sb = PF.speedBreakdown(e); return `<span class="stat-big" title="${esc(speedTitleText(sb))}"><span class="v">${sb.total} ft</span><span class="l">Speed</span></span>`; })()}
         ${buffed ? '<span class="pill gold" title="active buffs/conditions are applied to these numbers">⚡ live</span>' : ''}
         <span style="flex:1"></span>
         <button id="rest-btn" title="Restores spell slots, refills capped trackers, removes nonlethal damage, heals character level in HP">🌙 Rest</button>
       </div>
 
       <div class="row">
-        <div class="panel" style="flex:1;min-width:300px">
+        <div class="panel play-hp" style="flex:1;min-width:300px">
           <h3>Hit Points</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <input class="tiny" type="number" id="hp-amt" value="1" min="1">
@@ -1335,7 +1399,7 @@
           </div>`).join('')}
         </div>
 
-        <div class="panel" style="flex:1;min-width:300px">
+        <div class="panel play-rolls" style="flex:1;min-width:300px">
           <h3>🎲 Rolls <span class="small muted">— click to roll d20 + modifier</span></h3>
           <p>${rollChip('Initiative', init)} ${rollChip('Fortitude', sv.fort)} ${rollChip('Reflex', sv.ref)} ${rollChip('Will', sv.will)}
              ${rollChip('CMB', cm.cmb)}</p>
@@ -1545,13 +1609,15 @@
     const clearBtn = $('#clear-rolls');
     if (clearBtn) clearBtn.addEventListener('click', () => { p.rolls = []; save(); render(); });
     main.querySelectorAll('.roll-chip').forEach(b => b.addEventListener('click', () => {
+      let entry;
       if (b.dataset.fullatk) {
         const mods = (b.dataset.atkMods || '').split(',').map(n => parseInt(n, 10) || 0);
-        logFullAttack(c, b.dataset.rollLabel, mods, b.dataset.rollDice, b.dataset.rollBonus);
+        entry = logFullAttack(c, b.dataset.rollLabel, mods, b.dataset.rollDice, b.dataset.rollBonus);
       } else {
-        logRoll(c, b.dataset.rollLabel, parseInt(b.dataset.rollMod, 10) || 0,
+        entry = logRoll(c, b.dataset.rollLabel, parseInt(b.dataset.rollMod, 10) || 0,
           b.dataset.rollDice, b.dataset.rollBonus, b.dataset.rollNod20 === '1');
       }
+      showRollToast(entry);
       render();
     }));
     $('#add-custom-roll').addEventListener('click', () => {
@@ -1899,6 +1965,10 @@
     // totals through the same engine path the sheet/Play tab use (permanent
     // feature bonuses + skillMiscAll included), so the tabs can't disagree
     const eff = PF.effective(c, { buffs: false });
+    const rankedOnly = !!loadUiPrefs().skillsRankedOnly;
+    const visibleRows = rankedOnly
+      ? skillRows.filter(({ name }) => (parseInt(c.skills[name], 10) || 0) > 0)
+      : skillRows;
 
     main.innerHTML = `<h2>Skills</h2>${statBar(c)}
       <div class="panel">
@@ -1906,11 +1976,14 @@
           <span class="muted small">(class ranks + Int${PF.getRace(c.race) && c.race === 'Human' ? ' + human bonus' : ''} + favored class)</span>
           • Max ranks per skill: <b>${maxRanks}</b>
           • Armor check penalty: <b>${PF.armorCheckPenalty(c)}</b>
-          <button class="small" id="add-custom-skill" style="float:right">+ Custom skill</button></p>
+          <button class="small" id="add-custom-skill" style="float:right">+ Custom skill</button>
+          <label class="small" style="float:right;margin-right:10px;white-space:nowrap">
+            <input type="checkbox" id="sk-ranked" ${rankedOnly ? 'checked' : ''}> ranked only</label></p>
         <table class="data">
           <tr><th>Skill</th><th class="num">Total</th><th class="num">Ranks</th><th class="num">Class</th>
               <th class="num">Ability</th><th class="num">Misc</th><th></th></tr>
-          ${skillRows.map(({ name, sk }) => {
+          ${!visibleRows.length ? '<tr><td class="muted" colspan="7">No skills with ranks yet — untick “ranked only” to assign some.</td></tr>' : ''}
+          ${visibleRows.map(({ name, sk }) => {
             const ranks = parseInt(c.skills[name], 10) || 0;
             const natural = PF.isClassSkill(c, name, true);
             const isCs = natural || (c.classSkillExtra || []).includes(name);
@@ -1955,6 +2028,9 @@
     }));
     $('#add-custom-skill').addEventListener('click', () =>
       Custom.formModal('skills', () => render()));
+    $('#sk-ranked').addEventListener('change', e => {
+      saveUiPref('skillsRankedOnly', e.target.checked); render();
+    });
   }
 
   // ----- feats & traits -----
@@ -2148,10 +2224,12 @@
           <button class="primary small" id="add-item">+ Item / Magic Item</button>
           <button class="small" id="add-custom">+ Custom</button>
           <span style="flex:1"></span>
-          <label>PP <input class="tiny" type="number" id="m-pp" value="${c.money.pp || 0}"></label>
-          <label>GP <input class="tiny" type="number" id="m-gp" value="${c.money.gp || 0}"></label>
-          <label>SP <input class="tiny" type="number" id="m-sp" value="${c.money.sp || 0}"></label>
-          <label>CP <input class="tiny" type="number" id="m-cp" value="${c.money.cp || 0}"></label>
+          <span class="money-group">
+            <label>PP <input class="money" type="number" id="m-pp" value="${c.money.pp || 0}"></label>
+            <label>GP <input class="money" type="number" id="m-gp" value="${c.money.gp || 0}"></label>
+            <label>SP <input class="money" type="number" id="m-sp" value="${c.money.sp || 0}"></label>
+            <label>CP <input class="money" type="number" id="m-cp" value="${c.money.cp || 0}"></label>
+          </span>
         </div>
         <table class="data" style="margin-top:10px">
           <tr><th>Item</th><th>Kind</th><th class="num">Qty</th><th class="num">Weight (ea)</th><th class="num">Equipped</th><th>Note</th><th></th></tr>

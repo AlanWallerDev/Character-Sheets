@@ -62,6 +62,15 @@ input[type=number] { width: 76px; }
 input.tiny { width: 64px; text-align: center; padding: 5px 4px; }
 label { color: var(--muted); font-size: .9em; }
 
+/* money row: wide enough for 4-5 digit gp totals, wraps as one tidy group */
+.money-group { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+input.money { width: 92px; text-align: right; }
+
+/* keyboard focus for the div/span controls (nav, click-to-roll, rules refs) */
+.nav-item:focus-visible, .roller:focus-visible, .ref:focus-visible, .char-card:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
 /* ---------- layout ---------- */
 #app { display: flex; height: 100vh; }
 .sidebar {
@@ -87,7 +96,7 @@ label { color: var(--muted); font-size: .9em; }
 .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(201,162,39,.07); }
 .nav-item.sub { padding-left: 34px; font-size: .9em; }
 .sidebar .spacer { flex: 1; }
-.sidebar .foot { padding: 10px 16px; font-size: .72em; color: #6e614f; border-top: 1px solid var(--border); }
+.sidebar .foot { padding: 10px 16px; font-size: .72em; color: var(--muted); border-top: 1px solid var(--border); }
 .coffee-link {
   display: block; padding: 8px 16px; font-size: .78em;
   color: var(--muted); text-decoration: none;
@@ -237,6 +246,16 @@ table.data td.num, table.data th.num { text-align: center; }
 .sidebar .sb-hide { display: none; color: var(--muted); font-size: .85em; border-bottom: 1px solid var(--border); }
 .sb-backdrop { display: none; }
 
+/* ---------- touch devices: bigger tap targets ---------- */
+/* the Play tab is used on phones at the table — 20px chips are too easy to miss.
+   WCAG 2.5.8 wants ≥24px; this lands roll chips and steppers around 36-38px. */
+@media (pointer: coarse) {
+  button.small, .roll-chip { padding: 9px 12px; font-size: .9em; }
+  .pill a { display: inline-block; padding: 4px 6px; }   /* ✕ remove links inside pills */
+  input.tiny { min-height: 38px; }
+  .lib-row { padding: 11px 12px; }
+}
+
 /* ---------- small screens ---------- */
 @media (max-width: 980px) {
   /* the sidebar becomes a fixed overlay drawer so it never squeezes content */
@@ -251,6 +270,8 @@ table.data td.num, table.data th.num { text-align: center; }
   .sidebar .sb-hide { display: block; }
   .sb-backdrop { display: block; position: fixed; inset: 0; z-index: 65; background: rgba(0,0,0,.5); }
   .main { padding: 52px 14px 60px; } /* always clear the floating ☰ button */
+  /* at the table the rolls matter most — put them above Hit Points when stacked */
+  .play-rolls { order: -1; }
   .grid3 { grid-template-columns: 1fr 1fr; }
   .ab-grid { grid-template-columns: repeat(3, 1fr); }
   .lib-wrap { flex-direction: column; height: auto; }

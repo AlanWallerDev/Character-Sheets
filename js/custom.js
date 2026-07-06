@@ -300,7 +300,7 @@ const Custom = (() => {
       <span class="small muted" style="margin-left:8px">Saved homebrew entries appear in pickers, the Library and hover popovers, marked as “Homebrew”.</span></div>
     </div>`;
     root.appendChild(overlay);
-    const close = () => root.removeChild(overlay);
+    const close = Library.modalKeys(overlay, () => root.removeChild(overlay));
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     overlay.querySelector('#cf-close').addEventListener('click', close);
     overlay.querySelector('#cf-save').addEventListener('click', () => {

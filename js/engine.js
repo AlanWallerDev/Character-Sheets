@@ -649,27 +649,35 @@ const PF = (() => {
   // (matches the book table: 20→15, 30→20, 40→30, 50→35, 60→40)
   const reducedSpeed = b => Math.ceil((b * 2 / 3) / 5) * 5;
 
-  function speed(c) {
+  // speed with the "why": { base, slowed, misc, total, steady, reasons: ['armor'|'load'] }
+  // so the UI can explain a reduced value instead of looking broken
+  function speedBreakdown(c) {
     const race = getRace(c.race);
     const base = (race && race.speed) || 30;
     let slowed = base;
+    const reasons = [];
     // e.g. dwarves: "Slow and Steady" — speed is never modified by armor or encumbrance
-    const steady = race && (race.traits || []).some(t => /never modified by armor or encumbrance/i.test(t.body));
+    const steady = !!(race && (race.traits || []).some(t => /never modified by armor or encumbrance/i.test(t.body)));
     if (!steady) {
       for (const { a } of equippedArmor(c)) {
         if (/medium|heavy/i.test(a.group)) {
           slowed = base === 30 ? num(a.spd30) || 20 : (base === 20 ? num(a.spd20) || 15 : reducedSpeed(base));
+          if (slowed < base) reasons.push('armor');
           break;
         }
       }
       // a medium/heavy load slows you like medium armor; armor and encumbrance
       // penalties don't stack — the worse one applies
       if (gearWeight(c) > carryCapacity(c).light) {
-        slowed = Math.min(slowed, reducedSpeed(base));
+        const lv = reducedSpeed(base);
+        if (lv < base && lv <= slowed) reasons.push('load');
+        slowed = Math.min(slowed, lv);
       }
     }
-    return slowed + (c.combat.speedMisc || 0);
+    const misc = c.combat.speedMisc || 0;
+    return { base, slowed, misc, steady, reasons, total: slowed + misc };
   }
+  const speed = c => speedBreakdown(c).total;
 
   // ---------- carrying ----------
   // carryStrBonus: effective Str increase for carrying (masterwork backpack +1, muleback cords +8…)
@@ -1531,7 +1539,7 @@ const PF = (() => {
     racialTraits, getRacialTrait, limitedResources,
     MYTHIC_PATHS, getMythicPath, getMythicAbility, getMythicSpell, isMythic, mythicSurgeDie, mythicPowerUses, mythicUniversalFeatures,
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
-    armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed,
+    armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed, speedBreakdown,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
     isFinesseWeapon, meleeAttackAbility, isThrownWeapon, weaponAttack,
     carryCapacity, gearWeight, casterInfo, spellOnClassList, bonusSlots, spellSlots, spellsKnownRow, spellDC,

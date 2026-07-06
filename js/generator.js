@@ -476,12 +476,21 @@
     for (let i = 0; i < 4; i++) rows.push(filler()); // visible "almosts" below
     strip.innerHTML = rows.map((r, i) =>
       `<div${i === pre ? ' class="win"' : ''}>${r}</div>`).join('');
+    const target = (pre - 1) * ITEM_H;             // chosen row -> middle row
+    // prefers-reduced-motion: land instantly (a short tick keeps the reel
+    // sequencing readable without any animation)
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      strip.style.transition = 'none';
+      strip.style.transform = 'translateY(-' + target + 'px)';
+      reelEl.classList.add('done');
+      setTimeout(done, 60);
+      return;
+    }
     strip.style.transition = 'none';
     strip.style.transform = 'translateY(0)';
     reelEl.classList.remove('done');
     // force reflow so the transition below actually animates
     void strip.offsetHeight;
-    const target = (pre - 1) * ITEM_H;             // chosen row -> middle row
     strip.style.transition = 'transform ' + dur + 's cubic-bezier(.15,.85,.25,1)';
     strip.style.transform = 'translateY(-' + target + 'px)';
     let fired = false;
@@ -604,6 +613,9 @@
       spinBtn.disabled = false;
       spinBtn.textContent = '🎰 Spin Again';
       saveBtn.style.display = '';
+      // once a result exists, saving is the payoff action — promote it
+      saveBtn.classList.add('primary');
+      spinBtn.classList.remove('primary');
       const c = buildCharacter(picks);           // preview copy for final math
       const finals = ABILITIES.map(ab =>
         `${AB_LABEL[ab]} <b>${PF.abilityScore(c, ab)}</b>`).join(' · ');
@@ -650,6 +662,8 @@
       picks = { seed };
       spinning = true;
       spinBtn.disabled = true;
+      spinBtn.classList.add('primary');
+      saveBtn.classList.remove('primary');
       saveBtn.style.display = 'none';
       main.querySelector('#gen-result').innerHTML = '';
 

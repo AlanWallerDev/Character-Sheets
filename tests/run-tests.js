@@ -86,6 +86,9 @@ check('masterwork adds +1 to hit, not damage', wamw.mods[0] === 9 && wamw.dice =
 // speed: medium armor slows a 30-ft race; dwarves are never slowed
 c.gear.push({ name: 'Breastplate', kind: 'armor', equipped: true, weight: 30 });
 check('medium armor slows 30 ft to 20 ft', PF.speed(c) === 20, PF.speed(c));
+const sb = PF.speedBreakdown(c);
+check('speedBreakdown total matches speed()', sb.total === PF.speed(c), sb);
+check('speedBreakdown names armor as the reason', sb.reasons.includes('armor'), sb.reasons);
 const dw = PF.newCharacter('Dwarf');
 dw.race = 'Dwarf';
 dw.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
