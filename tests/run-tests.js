@@ -137,6 +137,53 @@ check('generated wizard has spells', wc.spells.length > 0, wc.spells.length);
 check('every generated spell is on its class list', wc.spells.every(s => PF.spellOnClassList(s.name, s.cls)),
   wc.spells.filter(s => !PF.spellOnClassList(s.name, s.cls)).map(s => s.name));
 
+// ---------------- feat-bundle integrity ----------------
+// every feat named in every bundle must exist in the compiled data (typo guard)
+const badNames = [];
+for (const b of GEN.featBundles) for (const n of b.feats) if (!PF.getFeat(n)) badNames.push(b.id + ': ' + n);
+check('every bundle feat name exists in the data', badNames.length === 0, badNames);
+
+// every rollable class must have at least one themed (non-generalist) bundle by L10
+const themedless = [];
+for (const [cls, prof] of Object.entries(GEN.classProfiles)) {
+  if (!prof.roll) continue;
+  const any = GEN.featBundles.some(b => {
+    if (b.id === 'generalist' || (b.minLevel || 1) > 10) return false;
+    if (b.requiresCasting && !PF.casterInfo(cls)) return false;
+    if (!b.classes && !b.roles) return false;
+    return (b.classes || []).includes(cls) || (b.roles || []).includes(prof.role);
+  });
+  if (!any) themedless.push(cls);
+}
+check('every rollable class has a themed bundle by L10', themedless.length === 0, themedless);
+
+// the new class-identity bundles are offered to their classes and build legally
+const bundleCombos = [
+  ['Kineticist', 8, 'kinetic-blaster', { str: 10, dex: 14, con: 17, int: 10, wis: 12, cha: 8 }],
+  ['Shifter',    6, 'savage-shifter',  { str: 14, dex: 14, con: 12, int: 10, wis: 15, cha: 8 }],
+  ['Druid',      9, 'wild-shepherd',   { str: 10, dex: 12, con: 14, int: 10, wis: 17, cha: 8 }],
+  ['Alchemist',  7, 'grenadier',       { str: 10, dex: 16, con: 12, int: 16, wis: 10, cha: 8 }],
+  ['Witch',      7, 'hexweaver',       { str: 8,  dex: 12, con: 14, int: 17, wis: 10, cha: 10 }],
+  ['Gunslinger', 6, 'powder-grit',     { str: 10, dex: 17, con: 12, int: 10, wis: 14, cha: 8 }],
+  ['Bard',       8, 'virtuoso',        { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 17 }],
+];
+for (const [cls, level, bundle, abilities] of bundleCombos) {
+  const p = { seed: 99, level, race: 'Human', cls, cls2: null, levels2: 0, alignment: 'N',
+              abilities, skillTheme: null, featBundle: bundle, featBundle2: null, spellTheme: null };
+  const cands = PFGEN.featBundleCandidates(p, 0.7);
+  check(cls + ': ' + bundle + ' is offered', cands.some(x => x.value === bundle), cands.map(x => x.value));
+  const label = (GEN.featBundles.find(b => b.id === bundle) || {}).label;
+  const ch = PFGEN.buildCharacter(p);
+  check(cls + ': feats within allowance', ch.feats.length <= PF.featAllowance(ch).total,
+    { feats: ch.feats.length, allowed: PF.featAllowance(ch).total });
+  check(cls + ': no unmet prereqs', ch.feats.every(f => {
+    const ft = PF.getFeat(f.name);
+    return !ft || PF.checkFeatPrereqs(ch, ft).status !== 'unmet';
+  }), ch.feats.map(f => f.name));
+  check(cls + ': took at least one ' + bundle + ' feat', ch.feats.some(f => f.note === label),
+    ch.feats.map(f => f.name + ' [' + f.note + ']'));
+}
+
 // ---------------- result ----------------
 console.log('%d passed, %d failed', passed, failed);
 process.exit(failed ? 1 : 0);

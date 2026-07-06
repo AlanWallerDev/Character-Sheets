@@ -167,13 +167,20 @@ PFGENDATA.skillThemes = [
  *   roles   : class roles this fits (optional; OR-matched with classes)
  *   minLevel: don't offer below this
  *   requiresCasting: only offer if PF.casterInfo(class) is truthy — keeps
- *     metamagic/Spell Focus bundles away from Kineticist/Psychic/Medium etc.,
- *     whose casting the engine doesn't support
- * EXPAND: add reach-fighter, grapple, dirty-trick, metamagic-blaster variants,
- * teamwork bundles, style-feat (e.g. Crane/Dragon) chains.
+ *     metamagic/Spell Focus bundles away from the true non-casters (Kineticist,
+ *     Vigilante, Shifter). The occult casters (Mesmerist, Occultist, Psychic,
+ *     Spiritualist, Medium) DO have engine casting support and qualify.
+ * NOTE: walkChain can't see class features, only taken feats — so a chain link
+ * whose checkable prereq is granted as a class feature (e.g. Splash Weapon
+ * Mastery needing Throw Anything, which alchemists get free) must still list
+ * the prereq feat earlier in the chain, at the cost of a redundant slot.
+ * EXPAND (remaining ideas): more monk styles (Snake/Panther/Boar), a thrown-
+ * weapon Startoss chain, race-gated bundles.
  * ------------------------------------------------------------------------- */
 PFGENDATA.featBundles = [
-  { id:'two-handed-power', label:'Two-Handed Devastator', roles:['martial','gish'], weapon:'twoHanded',
+  // Paladin/Warpriest are role 'divine' but the two-hander is an iconic build
+  // for both — class-listed so the role gate doesn't lock them out
+  { id:'two-handed-power', label:'Two-Handed Devastator', roles:['martial','gish'], classes:['Paladin','Warpriest'], weapon:'twoHanded',
     favors:{str:2,con:1}, minLevel:1,
     feats:['Power Attack','Furious Focus','Cleave','Great Cleave','Cornugon Smash','Vital Strike','Dazing Assault','Improved Vital Strike'] },
 
@@ -268,8 +275,61 @@ PFGENDATA.featBundles = [
     favors:{int:2}, minLevel:1, requiresCasting:true,
     feats:['Spell Focus','Spell Specialization','Intensified Spell','Elemental Focus','Greater Elemental Focus','Persistent Spell','Quicken Spell'] },
 
+  // --- Nature & companions ---
+  { id:'wild-shepherd', label:'Voice of the Wild', classes:['Druid'], weapon:'oneHand',
+    favors:{wis:2}, minLevel:1, requiresCasting:true,
+    feats:['Natural Spell','Spell Focus','Augment Summoning','Boon Companion','Wild Speech','Powerful Shape'] },
+
+  { id:'savage-shifter', label:'Tooth and Claw', classes:['Shifter','Druid'], weapon:'natural',
+    favors:{str:1,wis:1}, minLevel:1,
+    feats:['Power Attack','Weapon Focus','Improved Natural Attack','Multiattack','Improved Initiative','Toughness'] },
+
+  { id:'beast-bond', label:'Bonded Hunter', classes:['Hunter','Ranger'], weapon:'ranged',
+    favors:{dex:1,wis:1}, minLevel:1,
+    feats:['Boon Companion','Point-Blank Shot','Precise Shot','Rapid Shot','Improved Initiative'] },
+
+  // --- Skulkers & scoundrels ---
+  { id:'shadow-blade', label:'Knife in the Dark', roles:['skill'], classes:['Slayer'], weapon:'finesse',
+    favors:{dex:2}, minLevel:1,
+    feats:['Weapon Finesse','Accomplished Sneak Attacker','Shadow Strike','Gang Up','Sap Adept','Sap Master'] },
+
+  { id:'dirty-fighter', label:'Gutter Tactics', roles:['martial','skill'], weapon:'oneHand',
+    favors:{int:2,dex:1}, minLevel:1,          // Combat Expertise gates the chain on Int 13
+    feats:['Combat Expertise','Improved Dirty Trick','Greater Dirty Trick','Quick Dirty Trick','Improved Feint'] },
+
+  { id:'bodyguard', label:'Living Bulwark', roles:['martial','divine'], weapon:'sword-board',
+    favors:{con:2}, minLevel:1,
+    feats:['Combat Reflexes','Bodyguard',"In Harm's Way",'Endurance','Diehard','Stalwart','Improved Stalwart','Toughness'] },
+
+  // --- Class-identity kits for the previously bundle-starved classes ---
+  { id:'kinetic-blaster', label:'Living Battery', classes:['Kineticist'], weapon:'none',
+    favors:{con:2,dex:1}, minLevel:1,          // blasts are ranged (touch) attacks
+    feats:['Point-Blank Shot','Precise Shot','Weapon Focus','Extra Wild Talent','Improved Initiative','Toughness'] },
+
+  { id:'grenadier', label:'Alchemical Artillery', classes:['Alchemist'], weapon:'ranged',
+    favors:{int:1,dex:2}, minLevel:1,          // Throw Anything is redundant for alchemists but
+                                               // Splash Weapon Mastery's prereq check needs the feat
+    feats:['Point-Blank Shot','Precise Shot','Throw Anything','Splash Weapon Mastery','Extra Bombs'] },
+
+  { id:'hexweaver', label:'Evil Eye', classes:['Witch','Shaman'], weapon:'none',
+    favors:{int:1,wis:1}, minLevel:1, requiresCasting:true,
+    feats:['Extra Hex','Accursed Hex','Spell Focus','Spell Penetration','Split Hex'] },
+
+  { id:'virtuoso', label:'Battle Hymn', classes:['Bard','Skald'], weapon:'finesse',
+    favors:{cha:2}, minLevel:1, requiresCasting:true,
+    feats:['Extra Performance','Lingering Performance','Spellsong','Flagbearer','Discordant Voice'] },
+
+  { id:'powder-grit', label:'Black Powder Devil', classes:['Gunslinger'], weapon:'ranged',
+    favors:{dex:2,wis:1}, minLevel:1,          // no Gunsmithing: gunslingers get it free at 1st
+    feats:['Rapid Reload','Point-Blank Shot','Precise Shot','Deadly Aim','Extra Grit','Improved Initiative'] },
+
+  { id:'artificer', label:'Wondrous Forge', roles:['arcane','divine','nature','gish'], weapon:'none',
+    favors:{int:2}, minLevel:3, requiresCasting:true,   // starts at Brew Potion (CL 3) — Scribe
+                                                        // Scroll omitted, wizards get it free
+    feats:['Brew Potion','Craft Wondrous Item','Craft Magic Arms and Armor','Craft Wand','Forge Ring'] },
+
   // --- Fallback (NO gates) — the only bundle guaranteed eligible for every
-  // class (occult non-casters are locked out of the requiresCasting bundles);
+  // class (true non-casters are locked out of the requiresCasting bundles);
   // the pipeline also drains leftover slots from this chain when a rolled
   // bundle runs dry at high level.
   { id:'generalist', label:'Seasoned Adventurer', favors:{}, minLevel:1,
