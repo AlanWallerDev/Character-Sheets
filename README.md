@@ -15,9 +15,10 @@ Everything is static — open it however you like:
 Characters are saved automatically in your browser (localStorage). Use **Export** on a
 character card to back one up as a JSON file, and **Import JSON** to restore or share.
 
-On narrow screens (phones, small windows) the layout adapts, and the side menu can be collapsed
-with **« Hide menu** to free up space — a floating **☰** button brings it back. The preference
-is remembered.
+On narrow screens (phones, small windows) the layout adapts: the side menu starts collapsed to
+free up space and opens as an overlay from the floating **☰** button (closing again when you pick
+something). On wider windows the menu is docked open and can be toggled with **« Hide menu**; that
+preference is remembered.
 
 ## What's included
 
@@ -33,13 +34,15 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 | --- | --- |
 | Classes (core, base, hybrid, occult, vigilante, shifter, unchained, prestige, NPC) | 67 |
 | Archetypes | 386 |
-| Feats — the complete corpus from all 165 books | 3,695 |
+| Class abilities & talents (rage powers, bloodlines, hexes, arcana, discoveries, revelations, talents) | 4,370 |
+| Feats — the complete corpus from all 165 books (incl. 318 mythic) | 3,695 |
 | Spells (class lists, schools, full descriptions; incl. all psychic magic) | 2,944 |
+| Mythic path abilities (across 6 paths) / mythic spells | 284 / 269 |
 | Equipment & magic items | 3,354 |
 | Weapons / armor with full stat blocks | 603 / 102 |
 | Playable races | 79 |
 | Alternate racial traits | 293 |
-| Character traits | 226 |
+| Character traits (incl. 17 drawbacks) | 243 |
 | Skills | 26 |
 | Buffs & spell effects (25 curated + the full spell library) | ~2,950 |
 | Companion species (animal companions, familiars, eidolon forms) | 69 + |
@@ -53,9 +56,11 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   (including flexible "+2 any" races), level increases and enhancement bonuses tracked separately.
 - **Race** — every race with parsed size, speed, languages and racial traits; alternate racial
   trait picker.
-- **Classes** — level-by-level multiclassing, archetype notes, favored class bonuses,
-  average/rolled/max HP, full progression tables in-app. The class dropdown remembers your last
-  pick so adding several levels in a row is quick.
+- **Classes** — level-by-level multiclassing, favored class bonuses, average/rolled/max HP, full
+  progression tables in-app. Pick **archetypes** and their replaced/altered features are applied —
+  swapped-out base features are struck from the sheet — and add **class abilities** (rage powers,
+  bloodlines, hexes, arcana, discoveries, revelations, talents) from a searchable picker. The class
+  dropdown remembers your last pick so adding several levels in a row is quick.
 - **Skills** — per-rank tracking with class-skill +3, armor check penalty, ability mods and
   point-budget validation (incl. favored class and human bonus ranks). Any skill can be toggled
   as a class skill (for traits/archetypes/homebrew), and you can add custom skills.
@@ -77,6 +82,9 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 - **Companions** — connected subsheets for animal companions & mounts, familiars, eidolons, and
   cohorts/followers, each auto-scaled from your effective class level (HD, BAB, saves, abilities,
   evolution pools, Leadership counts…). Cohorts can link to another character in your vault.
+- **Mythic** — optional mythic tier (1–10) and path (Archmage, Champion, Guardian, Hierophant,
+  Marshal, Trickster) on a dedicated tab: tier-scaled universal features, a path-ability picker,
+  mythic feats and mythic spells, with the mythic power pool and surge die tracked on the Play tab.
 
 ### Playing a character
 
@@ -121,10 +129,11 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   derived from the class's standard categories rather than a transcribed table, and the Special
   column lists the headline feature(s) gained at each level (some incremental higher-level gains —
   e.g. an ability's numeric scaling — may not be itemized).
-- Archetypes and alternate racial traits cover the PRD books; post-2014 softcover archetypes
-  aren't included (add via Homebrew if needed).
-- Archetypes are informational — the app shows their rules text but doesn't automatically swap
-  class features in the calculations.
+- Archetypes and alternate racial traits are applied — their replaced/altered/added features show
+  on the sheet and the base features they swap out are removed. Coverage is the PRD books; post-2014
+  softcover archetypes aren't included (add via Homebrew if needed). Feature *swaps* are handled, but
+  deep numeric re-derivations (e.g. an archetype that changes a class's Hit Die or a specific scaling
+  value) may still need a manual adjustment.
 - Auto-parsed spell buffs aren't perfect — complex or oddly-worded spells may parse partially or
   not at all (then editable by hand), and scaling values land at a base you may need to bump.
 - Conditional modifiers the app doesn't compute (rage, magic items, etc.) go in the **Notes** tab's

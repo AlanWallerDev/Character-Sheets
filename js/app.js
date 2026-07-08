@@ -77,10 +77,13 @@
   const isNarrow = () => window.matchMedia('(max-width: 980px)').matches;
 
   let state = { view: 'roster', charId: null, builderTab: 'profile' };
-  // default the drawer closed on phones (where it would otherwise crush the
-  // content), open on desktop; an explicit user preference always wins.
+  // default the drawer closed on phones / small windows (where it would
+  // otherwise crush the content). On a small window this wins over a saved
+  // "open" preference from a desktop session — an open inline sidebar there is
+  // never what you want; the ☰ button still opens it on demand. On wide
+  // viewports an explicit preference is honored (default open).
   const _sbPref = loadUiPrefs().sidebarHidden;
-  state.sidebarHidden = (_sbPref === undefined) ? isNarrow() : _sbPref;
+  state.sidebarHidden = isNarrow() ? true : (_sbPref === undefined ? false : _sbPref);
   const current = () => characters.find(c => c.id === state.charId) || null;
 
   // persist=false for responsive auto-toggles (tap-a-nav, backdrop, resize) so
