@@ -271,6 +271,45 @@ for (const [cls, level, bundle, abilities] of bundleCombos) {
   // (allowAbilities is keyed off the entry's `classes` array, which feats lack)
   check('feat clause parsing unaffected — Power Attack still met',
     PF.checkFeatPrereqs(c, pa).status === 'met');
+
+  // ---- prose talent chains (data-derived from "must have the X talent" text) ----
+  const totem = abils.find(a => a.name === 'Spirit Totem, Greater');
+  check('greater totem carries a chained prereq', totem && /spirit totem/i.test(totem.prereq || ''),
+    totem && totem.prereq);
+  if (totem) {
+    const bbn = PF.newCharacter('Barb');
+    bbn.levels.push({ cls: 'Barbarian', archetypes: [], hp: null, fcb: '' });
+    check('greater totem unmet without the base totem',
+      PF.checkFeatPrereqs(bbn, totem).status === 'unmet', PF.checkFeatPrereqs(bbn, totem));
+    bbn.classAbilities = [{ name: 'Spirit Totem', cls: 'Barbarian' }];
+    check('greater totem met once the base totem is chosen',
+      PF.checkFeatPrereqs(bbn, totem).status === 'met', PF.checkFeatPrereqs(bbn, totem));
+  }
+
+  // ---- authored advanced-talent level gate (rogue advanced talents = rogue 10) ----
+  const dispel = abils.find(a => a.name === 'Dispelling Attack');
+  check('Dispelling Attack gated at Rogue level 10', dispel && /rogue level 10th/i.test(dispel.prereq || ''),
+    dispel && dispel.prereq);
+  if (dispel) {
+    const r5 = PF.newCharacter('Rogue 5');
+    for (let i = 0; i < 5; i++) r5.levels.push({ cls: 'Rogue', archetypes: [], hp: null, fcb: '' });
+    check('advanced talent unmet for a level-5 rogue (level gate)',
+      PF.checkFeatPrereqs(r5, dispel).clauses.some(cl => /level 10th/i.test(cl.text) && cl.status === 'unmet'),
+      PF.checkFeatPrereqs(r5, dispel).clauses);
+    const r10 = PF.newCharacter('Rogue 10');
+    for (let i = 0; i < 10; i++) r10.levels.push({ cls: 'Rogue', archetypes: [], hp: null, fcb: '' });
+    r10.classAbilities = [{ name: 'Major Magic', cls: 'Rogue' }];  // satisfies the chained clause too
+    check('advanced talent level gate met for a level-10 rogue',
+      PF.checkFeatPrereqs(r10, dispel).clauses.every(cl => cl.status === 'met'),
+      PF.checkFeatPrereqs(r10, dispel).clauses);
+    // class-LEVEL gate, not character level: a rogue 5 / fighter 5 still fails
+    const multi = PF.newCharacter('Rogue 5 / Fighter 5');
+    for (let i = 0; i < 5; i++) multi.levels.push({ cls: 'Rogue', archetypes: [], hp: null, fcb: '' });
+    for (let i = 0; i < 5; i++) multi.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+    check('advanced talent gate keys off class level, not character level',
+      PF.checkFeatPrereqs(multi, dispel).clauses.some(cl => /level 10th/i.test(cl.text) && cl.status === 'unmet'),
+      PF.checkFeatPrereqs(multi, dispel).clauses);
+  }
 }
 
 // ---------------- result ----------------

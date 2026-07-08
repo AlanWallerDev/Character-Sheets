@@ -1220,6 +1220,73 @@ def foundry_prereq(html):
     return re.sub(r'\s+', ' ', txt).strip().strip(';').strip(',').strip()
 
 
+# Prose talent/power chains: "…must have the <name> rogue talent before choosing…",
+# "…a barbarian must have the <name> rage power…", etc. The <name> is captured up
+# to the ability-type word; we keep it ONLY when it resolves to a real class-ability
+# entry (see resolve_ability), so runaway prose ("an Intelligence score of 12…") and
+# non-ability requirements are dropped rather than emitted as bogus prereqs.
+_CHAIN_RE = re.compile(
+    r'must (?:have|possess|already have|first have|have taken|have selected|have chosen)'
+    r'(?:\s+(?:the|taken|selected|chosen))?\s+(.+?)\s+'
+    r'(?:rogue talent|ninja trick|master trick|slayer talent|investigator talent|'
+    r'talent|hex|rage power|arcanist exploit|magus arcana|arcana|discovery|'
+    r'revelation|trick|gift)\b', re.I)
+
+
+def chain_candidate(html):
+    t = re.sub(r'@\w+\[[^\]]*\]\{([^}]*)\}', r'\1', html or '')
+    t = re.sub(r'<[^>]+>', ' ', t).replace('&nbsp;', ' ').replace('&amp;', '&')
+    t = re.sub(r'\s+', ' ', t)
+    m = _CHAIN_RE.search(t)
+    if not m:
+        return ''
+    cand = m.group(1).strip().strip('.,;').strip()
+    # a couple of leading determiners can survive the capture
+    cand = re.sub(r'^(?:a|an|the|another)\s+', '', cand, flags=re.I).strip()
+    # bail on obvious non-names (score/level/class prose) — resolve_ability is the
+    # real gate, this just avoids long junk strings
+    return '' if len(cand) > 40 or not cand else cand
+
+
+def resolve_ability(name, name_map):
+    # name_map: {lower-cased ability name -> canonical name}. Returns the canonical
+    # name if `name` matches an entry directly or via the "greater/lesser/improved X"
+    # <-> "X, Greater" reordering the compendium uses, else None.
+    key = (name or '').strip().lower()
+    if key in name_map:
+        return name_map[key]
+    m = re.match(r'^(greater|improved|lesser|master)\s+(.+)$', key)
+    if m and '%s, %s' % (m.group(2), m.group(1)) in name_map:
+        return name_map['%s, %s' % (m.group(2), m.group(1))]
+    return None
+
+
+# Advanced talents unlock at a fixed class level (Core: rogue/slayer 10th) but the
+# compendium marks them nowhere, so this is an authored, conservative list — only
+# names we're confident are *advanced* (mis-tagging a normal talent would wrongly
+# gate a low-level character). Keyed by class name; entries are validated against
+# real ability names at build time, so unknown names are silently dropped. Extend
+# as needed. Level comes from the class's own advanced-talent rule.
+ADVANCED_TALENTS = {
+    'Rogue': (10, [
+        # Core Rulebook advanced rogue talents
+        'Crippling Strike', 'Defensive Roll', 'Dispelling Attack', 'Familiar', 'Feat',
+        'Improved Evasion (Talent)', 'Opportunist', 'Skill Mastery', 'Slippery Mind',
+        # Advanced Player's Guide (and other high-confidence) advanced rogue talents
+        'Another Day', 'Confounding Blades', 'Deadly Sneak', 'Entanglement of Blades',
+        'Fast Tumble', 'Frugal Trapsmith', 'Getaway Master', 'Hard Minded', 'Hard to Fool',
+        "Hunter's Surprise", 'Knock-Out Blow', 'Master of Disguise', 'Rumormonger',
+        'Stealthy Sniper', 'Thoughtful Reexamining', 'Weapon Snatcher',
+    ]),
+    'Rogue (Unchained)': (10, [
+        'Crippling Strike (UC)', 'Deadly Sneak (UC)', 'Defensive Roll (UC)',
+        'Dispelling Attack (UC)', 'Feat (UC)', 'Improved Evasion (UC)',
+        'Master of Disguise (UC)', 'Opportunist (UC)', 'Skill Mastery (UC)',
+        'Slippery Mind (UC)',
+    ]),
+}
+
+
 def foundry_spell_levels(learned):
     NORM = {'sorcerer/wizard': ['Sorcerer', 'Wizard'], 'cleric/oracle': ['Cleric', 'Oracle'],
             'unchained summoner': ['Summoner (Unchained)'], 'summoner (unchained)': ['Summoner (Unchained)']}
@@ -1311,17 +1378,43 @@ def extract_foundry_classfeatures():
             if nm and nm not in classes:
                 classes.append(nm)
         seen.add(name.lower())
-        entry = {
+        out.append({
             'name': name,
             'classes': classes,
             'kind': {'su': 'Su', 'ex': 'Ex', 'sp': 'Sp'}.get(s.get('abilityType'), ''),
             'source': COMPENDIUM_SRC,
             'html': html,
-        }
-        prereq = foundry_prereq(html)
-        if prereq:
-            entry['prereq'] = prereq
-        out.append(entry)
+        })
+
+    # Second pass: now that every ability name is known, derive machine-checkable
+    # prerequisites. Three sources, joined with "; " (feat-prereq syntax the engine
+    # already parses): an explicit "Prerequisite:" clause, a prose talent/power
+    # chain (validated against real ability names), and the authored advanced-talent
+    # level gate. checkFeatPrereqs turns ability-name clauses into c.classAbilities
+    # checks and "<Class> level Nth" into a class-level check.
+    name_map = {e['name'].lower(): e['name'] for e in out}
+    advanced = {}
+    for cls, (lvl, names) in ADVANCED_TALENTS.items():
+        for n in names:
+            canon = resolve_ability(n, name_map)
+            if canon:
+                advanced.setdefault(canon, []).append((cls, lvl))
+    ordinal = lambda n: '%d%s' % (n, {1: 'st', 2: 'nd', 3: 'rd'}.get(n if n < 20 else n % 10, 'th'))
+    for e in out:
+        parts, low = [], set()
+        def add(clause):
+            if clause and clause.lower() not in low:
+                parts.append(clause)
+                low.add(clause.lower())
+        add(foundry_prereq(e['html']))
+        chain = resolve_ability(chain_candidate(e['html']), name_map)
+        # don't restate a chain the explicit clause already names
+        if chain and chain.lower() not in ' ; '.join(parts).lower():
+            add(chain)
+        for cls, lvl in advanced.get(e['name'], []):
+            add('%s level %s' % (cls, ordinal(lvl)))
+        if parts:
+            e['prereq'] = '; '.join(parts)
     return out
 
 

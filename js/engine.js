@@ -1533,8 +1533,8 @@ const PF = (() => {
     // "ability to cast 2nd-level spells"
     m = /^ability to cast (\d+)\w*-level spells/i.exec(t);
     if (m) { const v = parseInt(m[1], 10); return { text: t, check: c => maxSpellLevel(c) >= v }; }
-    // "<Class> level 5th" (also "fighter level 8th")
-    m = /^([A-Za-z ]+?) level (\d+)/i.exec(t);
+    // "<Class> level 5th" (also "fighter level 8th", "Rogue (Unchained) level 10th")
+    m = /^([A-Za-z ()]+?) level (\d+)/i.exec(t);
     if (m) {
       const clsName = m[1].trim(), v = parseInt(m[2], 10);
       const cls = PFDATA.classes.find(x => x.name.toLowerCase() === clsName.toLowerCase());
