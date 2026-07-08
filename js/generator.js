@@ -171,13 +171,17 @@
     'Survival', 'Intimidate', 'Climb', 'Swim', 'Bluff', 'Ride', 'Heal', 'Spellcraft',
     'Use Magic Device', 'Disable Device', 'Escape Artist', 'Sleight of Hand',
     'Handle Animal', 'Knowledge (local)', 'Appraise', 'Linguistics', 'Fly', 'Disguise'];
+  // Only races that actually HAVE a fly speed spend ranks on Fly — the tengu
+  // playtest sheet burned 5 ranks it could never use
+  const FLY_RACES = new Set(['Strix', 'Gathlain', 'Wyvaran', 'Syrinx']);
   function distributeSkills(c, themeId) {
     const theme = (G().skillThemes || []).find(t => t.id === themeId);
     if (!theme) return;
     let budget = PF.skillPointsBudget(c);
     const cap = c.levels.length;
     const seen = new Set(), themeOrder = [], spillOrder = [];
-    const push = (arr, n) => { if (!seen.has(n)) { seen.add(n); arr.push(n); } };
+    const noFly = !FLY_RACES.has(c.race);
+    const push = (arr, n) => { if (noFly && n === 'Fly') return; if (!seen.has(n)) { seen.add(n); arr.push(n); } };
     for (const n of theme.skills) if (PF.isClassSkill(c, n)) push(themeOrder, n);
     for (const n of theme.skills) push(themeOrder, n);
     for (const n of SPILL_SKILLS) if (PF.isClassSkill(c, n)) push(spillOrder, n);
@@ -322,6 +326,196 @@
     }
   }
 
+  // ---------- choice-driven class features ----------
+  // Classes like Sorcerer and Ranger have features that ARE choices (bloodline,
+  // favored enemy). The reels never rolled them, so generated sheets shipped
+  // with empty classAbilities — playtest finding. Picks are deterministic per
+  // seed (own RNG stream; reel determinism is untouched).
+  const SCHOOLS = ['Abjuration', 'Conjuration', 'Divination', 'Enchantment',
+    'Evocation', 'Illusion', 'Necromancy', 'Transmutation'];
+  const FE_TYPES = ['undead', 'humans', 'animals', 'magical beasts', 'giants',
+    'aberrations', 'evil outsiders', 'dragons'];
+  const TERRAINS = ['urban', 'forest', 'underground', 'mountain', 'swamp', 'plains'];
+  // preferred sorcerer bloodlines per dominant spell school (filtered to data)
+  const BLOODLINE_BY_SCHOOL = {
+    necromancy: ['Undead Bloodline', 'Accursed Bloodline'],
+    evocation: ['Elemental Bloodline', 'Stormborn Bloodline', 'Draconic Bloodline'],
+    enchantment: ['Fey Bloodline', 'Serpentine Bloodline'],
+    illusion: ['Fey Bloodline', 'Shadow Bloodline'],
+    conjuration: ['Elemental Bloodline', 'Infernal Bloodline'],
+    abjuration: ['Celestial Bloodline', 'Arcane Bloodline'],
+    transmutation: ['Draconic Bloodline', 'Arcane Bloodline'],
+    divination: ['Arcane Bloodline', 'Destined Bloodline'],
+  };
+  const STYLE_BY_KIT = {
+    bow: 'Archery', crossbow: 'Crossbow', twoWeapon: 'Two-Weapon Combat',
+    finesse: 'Two-Weapon Combat', 'sword-board': 'Weapon and Shield',
+    twoHanded: 'Two-Handed Weapon', reach: 'Two-Handed Weapon', oneHand: 'Weapon and Shield',
+  };
+
+  const abilityExists = name => (PFDATA.classAbilities || []).some(a => a.name === name);
+  const abilitiesMatching = (re, cls) => (PFDATA.classAbilities || [])
+    .filter(a => re.test(a.name) && (!cls || (a.classes || []).includes(cls))).map(a => a.name);
+
+  // dominant school of the rolled spell theme (falls back to the class's list)
+  function themeDominantSchool(cls, themeId) {
+    const prof = (G().classProfiles || {})[cls] || {};
+    const theme = ((G().spellThemes || {})[prof.list] || []).find(t => t.id === themeId);
+    const counts = {};
+    for (const name of (theme ? theme.spells : [])) {
+      const s = PF.spellSchoolOf(name);
+      if (s) counts[s] = (counts[s] || 0) + 1;
+    }
+    let best = null;
+    for (const [s, n] of Object.entries(counts)) if (!best || n > counts[best]) best = s;
+    return best;                                   // lowercase or null
+  }
+
+  function assignClassChoices(c, picks, rng) {
+    const pick = arr => arr[Math.floor(rng() * arr.length)];
+    const add = (name, cls) => {
+      if (!c.classAbilities.some(a => a.name === name && a.cls === cls))
+        c.classAbilities.push({ name, cls });
+    };
+    for (const [cls, lvl] of PF.classLevels(c)) {
+      const themeId = cls === picks.cls ? picks.spellTheme : null;
+      const dom = themeDominantSchool(cls, themeId);
+      if (cls === 'Wizard') {
+        // specialist school = the theme's dominant school; opposition = the two
+        // schools the theme casts LEAST (never the chosen school). The school
+        // slot then flows into PF.spellSlots before spells are assigned.
+        const school = dom ? dom.charAt(0).toUpperCase() + dom.slice(1) : pick(SCHOOLS);
+        if (!abilityExists(school + ' School')) continue;      // data missing: stay universalist
+        add(school + ' School', cls);
+        const theme = ((G().spellThemes || {})[(G().classProfiles || {})[cls].list] || [])
+          .find(t => t.id === themeId);
+        const counts = {};
+        for (const n of (theme ? theme.spells : [])) {
+          const s = PF.spellSchoolOf(n);
+          if (s) counts[s] = (counts[s] || 0) + 1;
+        }
+        const opps = SCHOOLS.filter(s => s !== school)
+          .sort((a, b) => (counts[a.toLowerCase()] || 0) - (counts[b.toLowerCase()] || 0))
+          .slice(0, 2);
+        for (const o of opps) add(o + ' Opposition School', cls);
+      } else if (cls === 'Sorcerer') {
+        const prefs = (dom && BLOODLINE_BY_SCHOOL[dom] || []).filter(abilityExists);
+        const all = abilitiesMatching(/ Bloodline$/, 'Sorcerer');
+        if (prefs.length || all.length) add(prefs.length ? prefs[0] : pick(all), cls);
+      } else if (cls === 'Bloodrager') {
+        const all = abilitiesMatching(/ Bloodrager Bloodline$/, 'Bloodrager');
+        if (all.length) add(pick(all), cls);
+      } else if (cls === 'Cleric') {
+        const al = c.alignment || 'N';
+        const banned = new Set();
+        if (al.includes('G')) banned.add('Evil Domain');
+        if (al.includes('E')) banned.add('Good Domain');
+        if (al[0] === 'L') banned.add('Chaos Domain');
+        if (al[0] === 'C') banned.add('Law Domain');
+        const domains = abilitiesMatching(/ Domain$/, 'Cleric').filter(d => !banned.has(d));
+        for (let i = 0; i < 2 && domains.length; i++) {
+          const d = pick(domains);
+          add(d, cls); domains.splice(domains.indexOf(d), 1);
+        }
+      } else if (cls === 'Oracle') {
+        const mys = abilitiesMatching(/ Mystery$/, 'Oracle');
+        const cur = abilitiesMatching(/ Curse$/, 'Oracle');
+        if (mys.length) add(pick(mys), cls);
+        if (cur.length) add(pick(cur), cls);
+      } else if (cls === 'Witch') {
+        const pat = abilitiesMatching(/ Patron$/, 'Witch').filter(n => n !== "Witch's Patron");
+        if (pat.length) add(pick(pat), cls);
+      } else if (cls === 'Inquisitor') {
+        const inq = abilitiesMatching(/ Inquisition$/, 'Inquisitor');
+        if (inq.length) add(pick(inq), cls);
+      } else if (cls === 'Shaman') {
+        const sp = abilitiesMatching(/ Spirit$/, 'Shaman');
+        if (sp.length) add(pick(sp), cls);
+      } else if (cls === 'Ranger') {
+        // choices aren't enumerated in data — synthesize readable entries
+        const types = FE_TYPES.slice();
+        const feCount = 1 + Math.floor(lvl / 5);
+        for (let i = 0; i < feCount && types.length; i++) {
+          const t = pick(types); types.splice(types.indexOf(t), 1);
+          const bonus = i === 0 && lvl >= 5 ? 4 : 2;
+          add(`Favored Enemy (${t} +${bonus})`, cls);
+        }
+        if (lvl >= 2) {
+          const bundle = (G().featBundles || []).find(b => b.id === picks.featBundle);
+          const kit = (bundle && bundle.weapon) || ((G().classProfiles || {})[cls] || {}).weapon;
+          add(`Ranger Combat Style (${STYLE_BY_KIT[kit] || 'Archery'})`, cls);
+        }
+        if (lvl >= 3) add(`Favored Terrain (${pick(TERRAINS)})`, cls);
+        if (lvl >= 4) add(`Hunter's Bond (companions)`, cls);
+      }
+    }
+  }
+
+  // Spell Focus-style feats carry a school choice the bundles never recorded —
+  // append the character's dominant school to the note (playtest finding)
+  function fixFocusNotes(c, picks) {
+    const focusRe = /^(greater )?spell focus$/i;
+    const needsFix = (c.feats || []).filter(f =>
+      focusRe.test(String(f.name).trim()) &&
+      !SCHOOLS.some(s => String(f.note || '').toLowerCase().includes(s.toLowerCase())));
+    if (!needsFix.length) return;
+    // a specialist's focus follows their school; otherwise the theme's dominant
+    // school; otherwise whatever the sheet actually casts most
+    let best = null;
+    const spec = PF.specialistInfo(c, picks.cls);
+    if (spec && spec.school) best = spec.school.toLowerCase();
+    if (!best) best = themeDominantSchool(picks.cls, picks.spellTheme);
+    if (!best) {
+      const counts = {};
+      for (const sp of (c.spells || [])) {
+        const s = PF.spellSchoolOf(sp.name);
+        if (s) counts[s] = (counts[s] || 0) + (sp.lvl >= 1 ? 2 : 1);
+      }
+      for (const [s, n] of Object.entries(counts)) if (!best || n > counts[best]) best = s;
+    }
+    if (!best) return;
+    const school = best.charAt(0).toUpperCase() + best.slice(1);
+    for (const f of needsFix) f.note = f.note ? f.note + ' — ' + school : school;
+  }
+
+  // After spells land, make a specialist's prep sheet legal: opposition-school
+  // spells cost two slots, and the bonus school slot must hold a school spell.
+  function reconcilePrepared(c) {
+    for (const [cls] of PF.classLevels(c)) {
+      const sum = PF.preparedSummary && PF.preparedSummary(c, cls);
+      if (!sum) continue;
+      const spec = PF.specialistInfo(c, cls);
+      for (const lvlStr of Object.keys(sum)) {
+        const lvl = +lvlStr, cap = sum[lvlStr].cap;
+        const mine = () => c.spells.filter(s => s.cls === cls && s.lvl === lvl);
+        const prep = s => parseInt(s.prepared, 10) || 0;
+        const isOpp = s => !!(spec && spec.opposition.some(o => o.toLowerCase() === PF.spellSchoolOf(s.name)));
+        const isSchool = s => !!(spec && spec.school && PF.spellSchoolOf(s.name) === spec.school.toLowerCase());
+        const cost = () => mine().reduce((a, s) => a + prep(s) * (isOpp(s) ? 2 : 1), 0);
+        // 1) over cap: peel preps, opposition (2-for-1) first, school spells last
+        const peelOrder = [...mine().filter(isOpp), ...mine().filter(s => !isOpp(s) && !isSchool(s)), ...mine().filter(isSchool)];
+        for (const s of peelOrder) while (cost() > cap && prep(s) > 0) s.prepared = prep(s) - 1;
+        // 2) school slot in use but empty: shift one prep onto a school spell
+        if (spec && spec.school && sum[lvlStr].school) {
+          const schoolPrepped = () => mine().filter(isSchool).reduce((a, s) => a + prep(s), 0);
+          if (cost() > cap - 1 && schoolPrepped() < 1) {
+            let target = mine().find(isSchool);
+            if (!target) {                     // pull one in from the class list
+              const info = PF.casterInfo(cls);
+              const cand = (PFDATA.spells || []).find(sp => sp.levels && sp.levels[info.list] === lvl &&
+                PF.spellSchoolOf(sp.name) === spec.school.toLowerCase() &&
+                !c.spells.some(m => m.cls === cls && m.name === sp.name));
+              if (cand) { target = { name: cand.name, cls, lvl, prepared: 0 }; c.spells.push(target); }
+            }
+            const donor = mine().filter(s => !isSchool(s) && prep(s) > 0).sort((a, b) => prep(b) - prep(a))[0];
+            if (target && donor) { donor.prepared = prep(donor) - 1; target.prepared = prep(target) + 1; }
+            else if (donor) donor.prepared = prep(donor) - 1;   // no school spell exists: don't use the slot
+          }
+        }
+      }
+    }
+  }
+
   // ---------- gear ----------
   const COIN_GP = { pp: 10, gp: 1, sp: 0.1, cp: 0.01 };
   function costGp(str) {
@@ -403,12 +597,23 @@
     return c;
   }
 
+  // cumulative XP needed for each level on the medium track (index 0 = L1)
+  const MEDIUM_XP = [0, 2000, 5000, 9000, 15000, 23000, 35000, 51000, 75000, 105000,
+    155000, 220000, 315000, 445000, 635000, 890000, 1300000, 1800000, 2550000, 3600000];
+
   function buildCharacter(picks) {
     const c = baseCharacter(picks);
+    // separate RNG stream for build-time choices: reels stay seed+locks
+    // deterministic, and so do these picks
+    const crng = mulberry32(((picks.seed >>> 0) ^ 0x9E3779B9) >>> 0);
     if (picks.skillTheme) distributeSkills(c, picks.skillTheme);  // needs levels + abilities set
     if (picks.featBundle) applyFeats(c, picks);
+    assignClassChoices(c, picks, crng);       // BEFORE spells: the wizard school slot feeds spellSlots
     assignSpells(c, picks);                   // no-op for non-casters; themeless casters back-fill
+    reconcilePrepared(c);                     // opposition ×2 cost / school-slot legality
+    fixFocusNotes(c, picks);                  // record the school choice on Spell Focus-style feats
     applyGear(c, picks);
+    c.xp = MEDIUM_XP[Math.min(c.levels.length, 20) - 1] || 0;   // medium-track minimum
     c.notes = 'Rolled by the Random Character Generator (seed ' + picks.seed + ').';
     return c;
   }

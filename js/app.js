@@ -154,9 +154,13 @@
     if (p.slotsUsed && typeof p.slotsUsed === 'object') {
       for (const [cls, lv] of Object.entries(p.slotsUsed)) slotsUsed[cls] = intMap(lv);
     }
+    const spellsCast = {};
+    if (p.spellsCast && typeof p.spellsCast === 'object') {
+      for (const [cls, m] of Object.entries(p.spellsCast)) spellsCast[cls] = intMap(m);
+    }
     return {
       hpDamage: toInt(p.hpDamage), hpTemp: toInt(p.hpTemp), nonlethal: toInt(p.nonlethal),
-      mythicUsed: toInt(p.mythicUsed), slotsUsed,
+      mythicUsed: toInt(p.mythicUsed), slotsUsed, spellsCast,
       buffs: objArr(p.buffs, sanBuff),
       counters: objArr(p.counters, k => ({ name: toStr(k.name), cur: toInt(k.cur), max: toInt(k.max) })),
       rolls: objArr(p.rolls, sanRoll).slice(0, 30),
@@ -1302,21 +1306,50 @@
     });
     if (companionsHtml) companionsHtml = `<div class="panel"><h3>Companions</h3>${companionsHtml}</div>`;
 
-    // spell slots per caster class
+    // spell slots per caster class — spontaneous casters track slots per level;
+    // prepared casters track each prepared spell so a spent or unprepared
+    // spell can't be cast twice (playtest finding)
     let slotsHtml = '';
     for (const [clsName] of PF.classLevels(c)) {
       const slots = PF.spellSlots(c, clsName);
       if (!slots) continue;
-      const used = (p.slotsUsed[clsName] = p.slotsUsed[clsName] || {});
-      slotsHtml += `<div style="margin-top:6px"><b>${esc(clsName)}</b> <span class="small muted">(DC 10 + level + ${PF.casterInfo(clsName).ability.toUpperCase()})</span>
-        <table class="data small"><tr><th>Level</th>${slots.filter(s => s.total != null && s.lvl > 0).map(s => `<th class="num">${s.lvl}</th>`).join('')}</tr>
-        <tr><td>Used / total</td>${slots.filter(s => s.total != null && s.lvl > 0).map(s => {
-          const u = used[s.lvl] || 0;
-          return `<td class="num" style="white-space:nowrap">
-            <button class="small" data-slot="${esc(clsName)}:${s.lvl}:-1">−</button>
-            <b class="${u >= s.total ? 'err' : ''}">${u}</b>/${s.total}
-            <button class="small" data-slot="${esc(clsName)}:${s.lvl}:1">+</button></td>`;
-        }).join('')}</tr></table></div>`;
+      const info = PF.casterInfo(clsName);
+      if (info.kind === 'prepared') {
+        const cast = (p.spellsCast[clsName] = p.spellsCast[clsName] || {});
+        const mine = c.spells.filter(s => s.cls === clsName && s.lvl > 0 && (parseInt(s.prepared, 10) || 0) > 0);
+        slotsHtml += `<div style="margin-top:6px"><b>${esc(clsName)}</b> <span class="small muted">— prepared spells (cast / prepared)</span>`;
+        if (!mine.length) {
+          slotsHtml += `<p class="small muted">Nothing prepared — set prep counts on the Spells tab.</p></div>`;
+          continue;
+        }
+        const byLvl = {};
+        for (const s of mine) (byLvl[s.lvl] = byLvl[s.lvl] || []).push(s);
+        for (const sl of Object.keys(byLvl).sort((a, b) => a - b)) {
+          slotsHtml += `<div class="small" style="margin-top:4px"><span class="muted">L${sl}:</span> ` + byLvl[sl].map(s => {
+            const key = s.name + '|' + s.lvl;
+            const prep = parseInt(s.prepared, 10) || 0;
+            const u = Math.min(cast[key] || 0, prep);
+            const spent = u >= prep;
+            const dc = PF.spellDC(c, clsName, s.lvl, s.name);
+            return `<span class="pill" style="white-space:nowrap;margin:2px;${spent ? 'opacity:.55' : ''}" title="DC ${dc}">
+              <button class="small" data-castspell="${esc(clsName)}|${esc(key)}|-1">−</button>
+              <b class="${spent ? 'err' : ''}">${esc(s.name)}</b> ${u}/${prep}
+              <button class="small" data-castspell="${esc(clsName)}|${esc(key)}|1" ${spent ? 'disabled title="all prepared castings spent"' : ''}>+</button></span>`;
+          }).join(' ') + '</div>';
+        }
+        slotsHtml += '</div>';
+      } else {
+        const used = (p.slotsUsed[clsName] = p.slotsUsed[clsName] || {});
+        slotsHtml += `<div style="margin-top:6px"><b>${esc(clsName)}</b> <span class="small muted">(DC 10 + level + ${info.ability.toUpperCase()})</span>
+          <table class="data small"><tr><th>Level</th>${slots.filter(s => s.total != null && s.lvl > 0).map(s => `<th class="num">${s.lvl}</th>`).join('')}</tr>
+          <tr><td>Used / total</td>${slots.filter(s => s.total != null && s.lvl > 0).map(s => {
+            const u = used[s.lvl] || 0;
+            return `<td class="num" style="white-space:nowrap">
+              <button class="small" data-slot="${esc(clsName)}:${s.lvl}:-1">−</button>
+              <b class="${u >= s.total ? 'err' : ''}">${u}</b>/${s.total}
+              <button class="small" data-slot="${esc(clsName)}:${s.lvl}:1">+</button></td>`;
+          }).join('')}</tr></table></div>`;
+      }
     }
 
     main.innerHTML = `<h2>▶ Play — ${esc(c.name)}</h2>
@@ -1454,6 +1487,7 @@
     bind('hp-nl', c, v => { c.play.nonlethal = parseInt(v, 10) || 0; render(); });
     $('#rest-btn').addEventListener('click', () => adj(() => {
       p.slotsUsed = {};
+      p.spellsCast = {};
       for (const k of (p.counters || [])) if (k.max) k.cur = k.max;  // daily resources refresh
       p.mythicUsed = 0;
       p.nonlethal = 0;
@@ -1567,6 +1601,15 @@
       const [cls, lvl, d] = b.dataset.slot.split(':');
       const u = p.slotsUsed[cls] = p.slotsUsed[cls] || {};
       u[lvl] = Math.max(0, (u[lvl] || 0) + parseInt(d, 10));
+      save(); render();
+    }));
+    main.querySelectorAll('[data-castspell]').forEach(b => b.addEventListener('click', () => {
+      const parts = b.dataset.castspell.split('|');           // cls | name | lvl | dir
+      const cls = parts[0], key = parts[1] + '|' + parts[2], d = parseInt(parts[3], 10);
+      const sp = c.spells.find(s => s.cls === cls && s.name === parts[1] && String(s.lvl) === parts[2]);
+      const prep = sp ? parseInt(sp.prepared, 10) || 0 : 0;
+      const u = p.spellsCast[cls] = p.spellsCast[cls] || {};
+      u[key] = Math.min(prep, Math.max(0, (u[key] || 0) + d));   // never past prepared count
       save(); render();
     }));
     $('#add-counter').addEventListener('click', () => {
@@ -2122,15 +2165,27 @@
           cols.unshift({ lvl: 0, base: null, bonus: 0, total: '∞' });
         }
         const cell = s => s.total == null ? '—' : s.total;
+        const spec = PF.specialistInfo(c, clsName);
+        const prepSum = PF.preparedSummary(c, clsName);
         h += `<table class="data small"><tr><th>Spell level</th>${cols.map(s => `<th class="num">${s.lvl}</th>`).join('')}</tr>
-          <tr><td>Slots/day (incl. ability bonus)</td>${cols.map(s => `<td class="num">${cell(s)}</td>`).join('')}</tr>
+          <tr><td>Slots/day (incl. ability bonus${spec && spec.school ? ' + ' + esc(spec.school) + ' school slot' : ''})</td>${cols.map(s => `<td class="num">${cell(s)}</td>`).join('')}</tr>
+          ${prepSum ? `<tr><td>Prepared (slot cost / cap${spec && spec.opposition.length ? ' — ' + esc(spec.opposition.join(', ')) + ' cost ×2' : ''})</td>${cols.map(s => {
+            const r = prepSum[s.lvl];
+            if (!r) return `<td class="num">—</td>`;
+            const art = /^[aeiou]/i.test((spec && spec.school) || '') ? 'an' : 'a';
+            const warn = r.over ? ' title="over-prepared for this level"' : r.schoolShort ? ` title="the school slot must hold ${art} ${esc((spec && spec.school) || '')} spell"` : '';
+            return `<td class="num ${r.over || r.schoolShort ? 'err' : ''}"${warn}>${r.cost}/${r.cap}</td>`;
+          }).join('')}</tr>` : ''}
           ${known ? `<tr><td>Spells known (selected / max)</td>${cols.map(s => {
             if (known[s.lvl] == null) return `<td class="num">—</td>`;
             const sel = selByLvl[s.lvl] || 0;
             return `<td class="num ${sel > known[s.lvl] ? 'err' : ''}">${sel}/${known[s.lvl]}</td>`;
           }).join('')}</tr>` : ''}
-          <tr><td>Save DC</td>${cols.map(s => `<td class="num">${s.total == null ? '—' : 10 + s.lvl + PF.abilityMod(c, info.ability)}</td>`).join('')}</tr>
+          <tr><td>Save DC (base — school feats shown per spell)</td>${cols.map(s => `<td class="num">${s.total == null ? '—' : 10 + s.lvl + PF.abilityMod(c, info.ability)}</td>`).join('')}</tr>
         </table>`;
+        if (prepSum && Object.values(prepSum).some(r => r.over || r.schoolShort)) {
+          h += `<p class="small err">⚠ Prepared spells exceed the slot rules above — opposition-school spells consume two slots, and the bonus school slot only holds ${esc((spec && spec.school) || 'school')} spells.</p>`;
+        }
       } else {
         h += '<p class="small muted">No slot table at this level (or non-standard caster) — track manually below.</p>';
       }
@@ -2146,8 +2201,20 @@
           const gi = c.spells.indexOf(s);
           const myth = PF.isMythic(c) && PF.getMythicSpell(s.name)
             ? ` <span class="small" style="color:var(--accent)" title="Has a mythic version — see Library → Mythic Spells">✦ mythic</span>` : '';
-          h += `<tr><td style="width:26%"><b>${esc(s.name)}</b>${myth}</td>
+          const school = PF.spellSchoolOf(s.name);
+          const spec2 = PF.specialistInfo(c, clsName);
+          let tag = '';
+          if (spec2 && school) {
+            if (spec2.school && school === spec2.school.toLowerCase())
+              tag = ` <span class="small" style="color:var(--accent)" title="can occupy the specialist school slot">school</span>`;
+            else if (spec2.opposition.some(o => o.toLowerCase() === school))
+              tag = ` <span class="small err" title="opposition school — costs two prepared slots">opp ×2</span>`;
+          }
+          const dc = PF.spellDC(c, clsName, +sl, s.name);
+          const focus = dc != null && dc !== PF.spellDC(c, clsName, +sl);
+          h += `<tr><td style="width:26%"><b>${esc(s.name)}</b>${myth}${tag}</td>
             <td class="small muted">${spell ? esc(spell.school + ' — ' + (spell.desc || '').slice(0, 90)) : ''}</td>
+            <td class="small num" style="width:58px" title="save DC${focus ? ' incl. Spell Focus' : ''}">DC ${dc == null ? '—' : dc}${focus ? '<span style="color:var(--accent)">*</span>' : ''}</td>
             <td style="width:110px"><label class="small">prep/cast <input class="tiny" type="number" min="0" data-prep="${gi}" value="${s.prepared || ''}"></label></td>
             <td><button class="small danger" data-delspell="${gi}">✕</button></td></tr>`;
         }

@@ -176,10 +176,13 @@ const Sheet = (() => {
       const slots = PF.spellSlots(c, clsName);
       if (!slots) continue;
       const info = PF.casterInfo(clsName);
-      h += `<h3>${esc(clsName)} Spells <span class="small muted">(${info.kind}, ${info.ability.toUpperCase()}-based)</span></h3>`;
+      const spec = PF.specialistInfo(c, clsName);
+      h += `<h3>${esc(clsName)} Spells <span class="small muted">(${info.kind}, ${info.ability.toUpperCase()}-based${spec && spec.school ? ', ' + esc(spec.school) + ' specialist' : ''})</span></h3>`;
       h += `<table class="data"><tr><th>Spell Level</th>${slots.map(s => `<th class="num">${s.lvl}</th>`).join('')}</tr>`;
-      h += `<tr><td>Slots/Day (incl. bonus)</td>${slots.map(s => `<td class="num">${s.total == null ? '—' : s.total}</td>`).join('')}</tr>`;
-      h += `<tr><td>Save DC</td>${slots.map(s => `<td class="num">${s.total == null ? '—' : 10 + s.lvl + PF.abilityMod(c, info.ability)}</td>`).join('')}</tr></table>`;
+      h += `<tr><td>Slots/Day (incl. bonus${spec && spec.school ? ' + school slot' : ''})</td>${slots.map(s => `<td class="num">${s.total == null ? '—' : s.total}</td>`).join('')}</tr>`;
+      h += `<tr><td>Save DC (base)</td>${slots.map(s => `<td class="num">${s.total == null ? '—' : 10 + s.lvl + PF.abilityMod(c, info.ability)}</td>`).join('')}</tr></table>`;
+      if (spec && spec.opposition.length)
+        h += `<p class="small muted">Opposition school${spec.opposition.length > 1 ? 's' : ''} (spells cost two prepared slots): ${spec.opposition.map(esc).join(', ')}</p>`;
       const known = c.spells.filter(s => s.cls === clsName);
       if (known.length) {
         const byLvl = {};
@@ -194,7 +197,10 @@ const Sheet = (() => {
               ? `<span class="offlist" title="Not on the ${esc(clsName)} spell list">${ref('spells', s.name)} †</span>`
               : ref('spells', s.name);
             const myth = (mythic && PF.getMythicSpell(s.name)) ? (anyMyth = true, ` ${ref('mythicSpell', s.name, '✦')}`) : '';
-            return `${nm}${s.prepared ? ' <span class="muted small">(×' + s.prepared + ')</span>' : ''}${myth}`;
+            const dc = PF.spellDC(c, clsName, +lvl, s.name);
+            const focused = dc != null && dc !== PF.spellDC(c, clsName, +lvl);
+            const dcTag = focused ? ` <span class="muted small" title="save DC incl. Spell Focus">[DC ${dc}]</span>` : '';
+            return `${nm}${s.prepared ? ' <span class="muted small">(×' + s.prepared + ')</span>' : ''}${dcTag}${myth}`;
           }).join(', ') + '</p>';
         }
         if (anyOff) h += `<p class="small muted">† not on the ${esc(clsName)} spell list</p>`;

@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8741"],
       "port": 8741
+    },
+    {
+      "name": "scan-to-order",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8742", "--directory", "C:/Users/zanca/Desktop/scan-to-order"],
+      "port": 8742
     }
   ]
 }

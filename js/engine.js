@@ -91,7 +91,7 @@ const PF = (() => {
                 miscFort: 0, miscRef: 0, miscWill: 0, miscAttack: 0, miscDamage: 0,
                 miscCMB: 0, miscCMD: 0, hpMisc: 0, speedMisc: 0,
                 carryStrBonus: 0, carryMult: 1, srNotes: '', resistNotes: '' },
-      play: { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, buffs: [], counters: [], rolls: [] },
+      play: { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, spellsCast: {}, buffs: [], counters: [], rolls: [] },
       mythic: { tier: 0, path: '', abilities: [] },   // mythic tier 0 = non-mythic
       skillMiscAll: 0,
       hpMode: 'avg',         // 'avg' | 'roll' | 'max'
@@ -739,6 +739,28 @@ const PF = (() => {
     return Math.floor((abilityModValue - spellLevel) / 4) + 1;
   }
 
+  // Specialist school + opposition schools, read from the character's chosen
+  // class abilities ("Illusion School", "Necromancy Opposition School").
+  // "Arcane School" (universalist) grants no bonus slot.
+  function specialistInfo(c, clsName) {
+    let school = null; const opposition = [];
+    for (const a of (c.classAbilities || [])) {
+      if (a.cls !== clsName) continue;
+      let m = /^(.+?) Opposition School$/i.exec(a.name);
+      if (m) { opposition.push(m[1].trim()); continue; }
+      m = /^(.+?) School$/i.exec(a.name);
+      if (m && !/^arcane$/i.test(m[1].trim())) school = m[1].trim();
+    }
+    return (school || opposition.length) ? { school, opposition } : null;
+  }
+
+  // lowercase school word of a spell ("illusion"), or null if unknown
+  function spellSchoolOf(spellName) {
+    const sp = getSpell(spellName);
+    const m = sp && sp.school ? /^([a-z]+)/i.exec(String(sp.school)) : null;
+    return m ? m[1].toLowerCase() : null;
+  }
+
   function spellSlots(c, clsName) {
     const lvl = classLevels(c).get(clsName);
     const info = casterInfo(clsName);
@@ -746,13 +768,48 @@ const PF = (() => {
     const row = progRow(clsName, lvl);
     if (!row || !row.spd) return null;
     const abM = abilityMod(c, info.ability);
+    const spec = specialistInfo(c, clsName);
     const out = [];
     for (let s = 0; s <= 9; s++) {
       const base = row.spd[s];
       if (base === undefined) continue;
-      if (base === null) { out.push({ lvl: s, base: null, bonus: 0, total: null }); continue; }
+      if (base === null) { out.push({ lvl: s, base: null, bonus: 0, school: 0, total: null }); continue; }
       const b = s >= 1 ? bonusSlots(abM, s) : 0;
-      out.push({ lvl: s, base, bonus: b, total: base + b });
+      const sch = (spec && spec.school && s >= 1) ? 1 : 0;   // specialist school slot
+      out.push({ lvl: s, base, bonus: b, school: sch, total: base + b + sch });
+    }
+    return out;
+  }
+
+  // Per-level prepared-slot accounting for prepared casters: opposition-school
+  // spells cost TWO slots, and the specialist school slot must hold a spell of
+  // that school. Returns {lvl: {cost, cap, school, schoolPrepared, over, schoolShort}}.
+  function preparedSummary(c, clsName) {
+    const info = casterInfo(clsName);
+    if (!info || info.kind !== 'prepared') return null;
+    const slots = spellSlots(c, clsName);
+    if (!slots) return null;
+    const spec = specialistInfo(c, clsName);
+    const out = {};
+    for (const s of slots) {
+      if (s.lvl < 1 || s.total == null) continue;
+      out[s.lvl] = { cost: 0, cap: s.total, school: s.school || 0, schoolPrepared: 0 };
+    }
+    for (const sp of (c.spells || [])) {
+      if (sp.cls !== clsName) continue;
+      const n = parseInt(sp.prepared, 10) || 0;
+      if (!n) continue;
+      const row = out[sp.lvl];
+      if (!row) continue;
+      const school = spellSchoolOf(sp.name);
+      const isOpp = !!(spec && school && spec.opposition.some(o => o.toLowerCase() === school));
+      row.cost += n * (isOpp ? 2 : 1);
+      if (spec && spec.school && school === spec.school.toLowerCase()) row.schoolPrepared += n;
+    }
+    for (const row of Object.values(out)) {
+      row.over = row.cost > row.cap;
+      // using the school slot's capacity without a school spell to sit in it
+      row.schoolShort = row.school > 0 && row.cost > row.cap - row.school && row.schoolPrepared < 1;
     }
     return out;
   }
@@ -764,10 +821,22 @@ const PF = (() => {
     return cls.spellsKnown[lvl] || null;
   }
 
-  function spellDC(c, clsName, spellLevel) {
+  // +1 per Spell Focus / Greater Spell Focus whose note names the spell's school
+  function spellFocusBonus(c, school) {
+    if (!school) return 0;
+    let b = 0;
+    for (const f of (c.feats || [])) {
+      if (!/^(greater )?spell focus$/i.test(String(f.name).trim())) continue;
+      if (String(f.note || '').toLowerCase().includes(school)) b++;
+    }
+    return b;
+  }
+
+  function spellDC(c, clsName, spellLevel, spellName) {
     const info = casterInfo(clsName);
     if (!info) return null;
-    return 10 + spellLevel + abilityMod(c, info.ability);
+    const focus = spellName ? spellFocusBonus(c, spellSchoolOf(spellName)) : 0;
+    return 10 + spellLevel + abilityMod(c, info.ability) + focus;
   }
 
   // ---------- companions ----------
@@ -1048,7 +1117,7 @@ const PF = (() => {
   }));
 
   function newPlayState() {
-    return { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, buffs: [], counters: [], rolls: [], customRolls: [] };
+    return { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, spellsCast: {}, buffs: [], counters: [], rolls: [], customRolls: [] };
   }
 
   // ---------- spell -> buff effect parsing ----------
@@ -1543,6 +1612,7 @@ const PF = (() => {
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
     isFinesseWeapon, meleeAttackAbility, isThrownWeapon, weaponAttack,
     carryCapacity, gearWeight, casterInfo, spellOnClassList, bonusSlots, spellSlots, spellsKnownRow, spellDC,
+    specialistInfo, spellSchoolOf, preparedSummary, spellFocusBonus,
     totalGold, num,
     getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
