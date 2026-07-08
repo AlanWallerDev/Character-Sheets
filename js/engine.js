@@ -1133,6 +1133,20 @@ const PF = (() => {
 
   const SPELL_BONUS_TYPES = 'enhancement|morale|luck|competence|sacred|profane|insight|resistance|deflection|dodge|alchemical|circumstance|size|racial|trait|natural armor|armor|shield';
 
+  // Matches any single named skill (Perception, Use Magic Device, …). A bonus
+  // "on <Skill Name> checks" targets that one skill, which the engine models via
+  // per-skill skillMisc — it must NOT fold into the all-skills skillMiscAll the
+  // 'skills' target maps to. Built lazily so PFDATA.skills is loaded first.
+  let _namedSkillRe;
+  function namedSkillRe() {
+    if (_namedSkillRe) return _namedSkillRe;
+    const names = (PFDATA.skills || []).map(s => s.name)
+      .sort((a, b) => b.length - a.length)                 // longest first: match "Sleight of Hand" before "Hand"
+      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    _namedSkillRe = names.length ? new RegExp('\\b(?:' + names.join('|') + ')\\b', 'i') : /$^/;
+    return _namedSkillRe;
+  }
+
   function phraseToTargets(phrase, type) {
     const p = ' ' + phrase.toLowerCase() + ' ';
     const out = new Set();
@@ -1146,7 +1160,10 @@ const PF = (() => {
     if (/damage roll|weapon damage|\bdamage\b/.test(p)) out.add('damage');
     if (/initiative/.test(p)) out.add('init');
     if (/\bspeed\b/.test(p)) out.add('speed');
-    if (/skill check|\bskills?\b/.test(p)) out.add('skills');
+    // Only a genuine all-skills bonus maps to 'skills'. A named-skill bonus
+    // ("+1 on Use Magic Device checks") or class-skill wording ("… is always a
+    // class skill") must not inflate every skill via skillMiscAll.
+    if (/skill check|\bskills?\b/.test(p) && !/\bclass skill\b/.test(p) && !namedSkillRe().test(p)) out.add('skills');
     if (/combat maneuver defense|\bcmd\b/.test(p)) out.add('cmd');
     else if (/combat maneuver|\bcmb\b/.test(p)) out.add('cmb');
     const fort = /fortitude/.test(p), ref = /reflex/.test(p), will = /\bwill\b/.test(p);
