@@ -45,6 +45,18 @@ const PF = (() => {
 
   const POINT_BUY_COST = { 7: -4, 8: -2, 9: -1, 10: 0, 11: 1, 12: 2, 13: 3, 14: 5, 15: 7, 16: 10, 17: 13, 18: 17 };
 
+  // Cumulative XP thresholds to *reach* each character level, per the three
+  // Core Rulebook advancement tracks. Index 0 = level 1 = 0 XP; index 19 = level 20.
+  const XP_TRACKS = {
+    slow:   [0, 3000, 7500, 14000, 23000, 35000, 53000, 77000, 115000, 160000,
+             235000, 330000, 475000, 665000, 955000, 1350000, 1900000, 2700000, 3850000, 5350000],
+    medium: [0, 2000, 5000, 9000, 15000, 23000, 35000, 51000, 75000, 105000,
+             155000, 220000, 315000, 445000, 635000, 890000, 1300000, 1800000, 2550000, 3600000],
+    fast:   [0, 1300, 3300, 6000, 10000, 15000, 23000, 34000, 50000, 71000,
+             105000, 145000, 210000, 295000, 425000, 600000, 850000, 1200000, 1700000, 2400000],
+  };
+  const XP_MAX_LEVEL = 20;
+
   // ---------- lookups ----------
   const byName = (arr, name) => arr.find(x => x.name === name);
   const getClass = n => byName(PFDATA.classes, n);
@@ -68,7 +80,7 @@ const PF = (() => {
       id: 'pc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       name: name || 'New Character',
       player: '', alignment: 'N', deity: '', homeland: '', gender: '', age: '',
-      height: '', weight: '', hair: '', eyes: '', xp: 0,
+      height: '', weight: '', hair: '', eyes: '', xp: 0, xpTrack: 'medium',
       abilityMethod: 'pointbuy', pointBuyBudget: 20,
       abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
       abilityMisc: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
@@ -123,6 +135,51 @@ const PF = (() => {
       total += POINT_BUY_COST[v] !== undefined ? POINT_BUY_COST[v] : (v > 18 ? 17 + (v - 18) * 4 : -4);
     }
     return total;
+  }
+
+  // ---------- experience ----------
+  function xpTable(track) { return XP_TRACKS[track] || XP_TRACKS.medium; }
+
+  // cumulative XP required to *reach* a character level (1-20) on a track
+  function xpForLevel(level, track) {
+    const t = xpTable(track);
+    const lv = Math.max(1, Math.min(XP_MAX_LEVEL, Math.floor(Number(level) || 1)));
+    return t[lv - 1];
+  }
+
+  // highest level whose threshold the given XP total has reached (1-20)
+  function levelForXp(xp, track) {
+    const t = xpTable(track);
+    const x = Math.max(0, num(xp));
+    let lvl = 1;
+    for (let i = 1; i < t.length; i++) { if (x >= t[i]) lvl = i + 1; else break; }
+    return lvl;
+  }
+
+  // progress toward the next character level for a character sheet.
+  //   current       — XP total (clamped >= 0)
+  //   level         — current build level (c.levels.length, min 1)
+  //   nextThreshold — XP needed for level+1 (null at level 20)
+  //   toNext        — XP still needed to reach level+1
+  //   pctToNext     — 0-100 progress across the current level's XP band
+  //   canLevel      — XP already meets/exceeds the next level's threshold
+  //   xpLevel       — level implied by the XP total (for consistency checks)
+  function xpProgress(c) {
+    const track = (c && c.xpTrack) || 'medium';
+    const xp = Math.max(0, num(c && c.xp));
+    const level = Math.max(1, (c && c.levels ? c.levels.length : 0) || 1);
+    const xpLevel = levelForXp(xp, track);
+    if (level >= XP_MAX_LEVEL) {
+      return { track, current: xp, level: XP_MAX_LEVEL, prevThreshold: xpForLevel(XP_MAX_LEVEL, track),
+        nextThreshold: null, toNext: 0, pctToNext: 100, canLevel: false, xpLevel };
+    }
+    const prevThreshold = xpForLevel(level, track);
+    const nextThreshold = xpForLevel(level + 1, track);
+    const span = nextThreshold - prevThreshold;
+    const into = xp - prevThreshold;
+    const pctToNext = span > 0 ? Math.max(0, Math.min(100, Math.round((into / span) * 100))) : 0;
+    return { track, current: xp, level, prevThreshold, nextThreshold,
+      toNext: Math.max(0, nextThreshold - xp), pctToNext, canLevel: xp >= nextThreshold, xpLevel };
   }
 
   // ---------- classes / levels ----------
@@ -1648,8 +1705,9 @@ const PF = (() => {
   }
 
   return {
-    ABILITIES, ABILITY_NAMES, CASTERS, POINT_BUY_COST, SIZE_MOD,
+    ABILITIES, ABILITY_NAMES, CASTERS, POINT_BUY_COST, SIZE_MOD, XP_TRACKS, XP_MAX_LEVEL,
     mod, newCharacter, racialMods, abilityScore, abilityMod, pointBuyCost,
+    xpForLevel, levelForXp, xpProgress,
     classLevels, progRow, babValue, totals, iterAttacks, hitDie, hpBreakdown, hasFeat, featAllowance,
     classFeatures, parseArchetype, getArchetype, classFeatureHTML, archetypeFeatureHTML,
     racialTraits, getRacialTrait, limitedResources,

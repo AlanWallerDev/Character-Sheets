@@ -312,6 +312,94 @@ for (const [cls, level, bundle, abilities] of bundleCombos) {
   }
 }
 
+// ---------------- experience / XP tracks ----------------
+// xpForLevel: known Core Rulebook thresholds on each track
+check('xpForLevel(1, medium) = 0', PF.xpForLevel(1, 'medium') === 0, PF.xpForLevel(1, 'medium'));
+check('xpForLevel(2, medium) = 2000', PF.xpForLevel(2, 'medium') === 2000, PF.xpForLevel(2, 'medium'));
+check('xpForLevel(20, medium) = 3,600,000', PF.xpForLevel(20, 'medium') === 3600000, PF.xpForLevel(20, 'medium'));
+check('xpForLevel(2, slow) = 3000', PF.xpForLevel(2, 'slow') === 3000, PF.xpForLevel(2, 'slow'));
+check('xpForLevel(20, slow) = 5,350,000', PF.xpForLevel(20, 'slow') === 5350000, PF.xpForLevel(20, 'slow'));
+check('xpForLevel(2, fast) = 1300', PF.xpForLevel(2, 'fast') === 1300, PF.xpForLevel(2, 'fast'));
+check('xpForLevel(20, fast) = 2,400,000', PF.xpForLevel(20, 'fast') === 2400000, PF.xpForLevel(20, 'fast'));
+// track is monotonically increasing on all three tracks
+['slow', 'medium', 'fast'].forEach(tk => {
+  let ok = true;
+  for (let lv = 2; lv <= 20; lv++) if (PF.xpForLevel(lv, tk) <= PF.xpForLevel(lv - 1, tk)) ok = false;
+  check(`${tk} track strictly increasing L1..L20`, ok);
+});
+// unknown / missing track falls back to medium
+check('unknown track falls back to medium', PF.xpForLevel(5, 'bogus') === PF.xpForLevel(5, 'medium'));
+check('missing track falls back to medium', PF.xpForLevel(5) === PF.xpForLevel(5, 'medium'));
+// out-of-range levels clamp to 1..20
+check('xpForLevel clamps below 1 to L1', PF.xpForLevel(0, 'medium') === 0);
+check('xpForLevel clamps above 20 to L20', PF.xpForLevel(99, 'medium') === 3600000);
+
+// levelForXp: boundaries are inclusive (reaching a threshold = that level)
+check('levelForXp(0) = 1', PF.levelForXp(0, 'medium') === 1, PF.levelForXp(0, 'medium'));
+check('levelForXp(1999) = 1 (just under)', PF.levelForXp(1999, 'medium') === 1, PF.levelForXp(1999, 'medium'));
+check('levelForXp(2000) = 2 (exact threshold)', PF.levelForXp(2000, 'medium') === 2, PF.levelForXp(2000, 'medium'));
+check('levelForXp(2001) = 2', PF.levelForXp(2001, 'medium') === 2, PF.levelForXp(2001, 'medium'));
+check('levelForXp(huge) caps at 20', PF.levelForXp(99999999, 'medium') === 20, PF.levelForXp(99999999, 'medium'));
+check('levelForXp(negative) = 1', PF.levelForXp(-500, 'medium') === 1, PF.levelForXp(-500, 'medium'));
+check('levelForXp exact on fast track L10 = 71000', PF.levelForXp(71000, 'fast') === 10, PF.levelForXp(71000, 'fast'));
+// xpForLevel / levelForXp round-trip at every threshold, every track
+['slow', 'medium', 'fast'].forEach(tk => {
+  let ok = true;
+  for (let lv = 1; lv <= 20; lv++) if (PF.levelForXp(PF.xpForLevel(lv, tk), tk) !== lv) ok = false;
+  check(`${tk}: levelForXp(xpForLevel(lv)) round-trips`, ok);
+});
+
+// xpProgress: mid-band character
+const xc = PF.newCharacter('XP Test');
+xc.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });   // level 1
+xc.xp = 1467;
+let xp = PF.xpProgress(xc);
+check('xpProgress current reflects c.xp', xp.current === 1467, xp);
+check('xpProgress nextThreshold = 2000', xp.nextThreshold === 2000, xp);
+check('xpProgress toNext = 533', xp.toNext === 533, xp);
+check('xpProgress pctToNext ~= 73%', xp.pctToNext === 73, xp.pctToNext);
+check('xpProgress not yet eligible below threshold', xp.canLevel === false, xp);
+
+// exactly at the next threshold => eligible to level up
+xc.xp = 2000;
+xp = PF.xpProgress(xc);
+check('xpProgress canLevel at exact threshold', xp.canLevel === true, xp);
+check('xpProgress toNext = 0 at threshold', xp.toNext === 0, xp);
+
+// track selection is honoured
+xc.xpTrack = 'fast'; xc.xp = 1300;
+xp = PF.xpProgress(xc);
+check('xpProgress honours xpTrack (fast L2 = 1300)', xp.nextThreshold === 1300 && xp.canLevel, xp);
+xc.xpTrack = 'medium';
+
+// level-20 character: no next threshold, capped progress
+const cap = PF.newCharacter('Capped');
+for (let i = 0; i < 20; i++) cap.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+cap.xp = 4000000;
+xp = PF.xpProgress(cap);
+check('xpProgress at L20 has null nextThreshold', xp.nextThreshold === null, xp);
+check('xpProgress at L20 pctToNext = 100', xp.pctToNext === 100, xp);
+check('xpProgress at L20 never canLevel', xp.canLevel === false, xp);
+
+// XP below the current level's floor clamps pct to 0 (manual-level inconsistency)
+const inc = PF.newCharacter('Inconsistent');
+for (let i = 0; i < 5; i++) inc.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+inc.xp = 0;
+xp = PF.xpProgress(inc);
+check('xpProgress pct clamps to 0 when xp below level floor', xp.pctToNext === 0, xp);
+check('xpProgress exposes xpLevel for consistency checks', xp.xpLevel === 1, xp.xpLevel);
+
+// generator now seeds XP from the shared table (track minimum for the level)
+if (PFGEN && typeof PFGEN.buildCharacter === 'function') {
+  try {
+    const gc = PFGEN.buildCharacter({ seed: 12345, level: 5, race: 'Human', cls: 'Fighter', alignment: 'N' });
+    check('generator XP matches shared medium-track minimum for its level',
+      gc.xp === PF.xpForLevel(gc.levels.length, gc.xpTrack || 'medium'), { xp: gc.xp, lv: gc.levels.length });
+  } catch (e) {
+    check('generator buildCharacter ran for XP check', false, String(e && e.message));
+  }
+}
+
 // ---------------- result ----------------
 console.log('%d passed, %d failed', passed, failed);
 process.exit(failed ? 1 : 0);

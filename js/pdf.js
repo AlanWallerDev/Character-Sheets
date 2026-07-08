@@ -158,6 +158,13 @@ const PDF = (() => {
     const subBits = [c.alignment, race ? race.name : '', classesStr, 'Level ' + t.level, c.deity, c.homeland].filter(Boolean);
     para(subBits.join('   •   '), { size: 10, color: COL.muted });
     if (c.player) para('Player: ' + c.player, { size: 9, color: COL.muted });
+    const xp = PF.xpProgress(c);
+    const nf = n => Number(n || 0).toLocaleString('en-US');
+    const xpText = xp.nextThreshold == null
+      ? 'XP: ' + nf(xp.current) + ' — max level'
+      : 'XP: ' + nf(xp.current) + ' / ' + nf(xp.nextThreshold) + ' to Level ' + (xp.level + 1)
+        + (xp.canLevel ? '  (ready to level up)' : '');
+    para(xpText, { size: 9, color: xp.canLevel ? COL.warn : COL.muted });
     y += 4;
 
     // ---------------- abilities ----------------

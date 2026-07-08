@@ -1690,7 +1690,9 @@
           `<option ${c.alignment === a ? 'selected' : ''}>${a}</option>`).join('')}</select>`)}
         ${field('Deity', input('f-deity', c.deity))}
         ${field('Homeland', input('f-home', c.homeland))}
-        ${field('XP', input('f-xp', c.xp, 'type="number"'))}
+        ${field('XP', input('f-xp', c.xp, 'type="number" min="0"'))}
+        ${field('XP Track', `<select id="f-xptrack">${['slow','medium','fast'].map(tk =>
+          `<option value="${tk}" ${(c.xpTrack || 'medium') === tk ? 'selected' : ''}>${tk[0].toUpperCase() + tk.slice(1)}</option>`).join('')}</select>`)}
         ${field('Gender', input('f-gender', c.gender))}
         ${field('Age', input('f-age', c.age))}
         ${field('Height', input('f-height', c.height))}
@@ -1698,13 +1700,15 @@
         ${field('Hair', input('f-hair', c.hair))}
         ${field('Eyes', input('f-eyes', c.eyes))}
         ${field('Languages', input('f-langs', c.languages))}
-      </div></div>`;
+      </div></div>
+      ${xpPanel(c)}`;
     bind('f-name', c, v => { c.name = v; render(); });
     bind('f-player', c, v => c.player = v);
     bind('f-align', c, v => c.alignment = v);
     bind('f-deity', c, v => c.deity = v);
     bind('f-home', c, v => c.homeland = v);
-    bind('f-xp', c, v => c.xp = parseInt(v, 10) || 0);
+    bind('f-xp', c, v => { c.xp = parseInt(v, 10) || 0; render(); });
+    bind('f-xptrack', c, v => { c.xpTrack = v; render(); });
     bind('f-gender', c, v => c.gender = v);
     bind('f-age', c, v => c.age = v);
     bind('f-height', c, v => c.height = v);
@@ -1712,6 +1716,52 @@
     bind('f-hair', c, v => c.hair = v);
     bind('f-eyes', c, v => c.eyes = v);
     bind('f-langs', c, v => c.languages = v);
+    wireXpPanel(c);
+  }
+
+  // XP progress + eligibility feedback and one-click XP adjustments for the builder.
+  function xpPanel(c) {
+    const x = PF.xpProgress(c);
+    const nf = n => Number(n || 0).toLocaleString('en-US');
+    const bar = x.nextThreshold == null ? 100 : x.pctToNext;
+    let head = x.nextThreshold == null
+      ? `<b>${nf(x.current)} XP</b> — Level ${x.level} (max level)`
+      : `<b>${nf(x.current)} XP</b> — ${nf(x.toNext)} to Level ${x.level + 1} `
+        + `<span class="muted">(${nf(x.prevThreshold)} → ${nf(x.nextThreshold)}, ${x.pctToNext}%)</span>`;
+    if (x.canLevel) head += ` <span class="tag" style="background:var(--accent,#3a7);color:#fff">Eligible to level up</span>`;
+    // manually-set class levels that disagree with the XP total
+    let warn = '';
+    if (c.levels.length && x.xpLevel !== c.levels.length) {
+      warn = `<p class="small err" style="margin:.4em 0 0">Heads up: ${nf(x.current)} XP corresponds to Level ${x.xpLevel} on the `
+        + `${esc(c.xpTrack || 'medium')} track, but this character has ${c.levels.length} class level`
+        + `${c.levels.length === 1 ? '' : 's'}.</p>`;
+    }
+    const quick = x.nextThreshold == null
+      ? `<button class="small" data-xp-add="1000">+1,000</button>
+         <button class="small" data-xp-add="5000">+5,000</button>`
+      : `<button class="small" data-xp-add="1000">+1,000</button>
+         <button class="small" data-xp-add="5000">+5,000</button>
+         <button class="small" data-xp-add="10000">+10,000</button>
+         <button class="small" data-xp-next>Fill to Level ${x.level + 1} (${nf(x.nextThreshold)})</button>`;
+    return `<div class="panel">
+      <p style="margin:0 0 .5em">${head}</p>
+      <div style="height:8px;border-radius:4px;background:rgba(127,127,127,.25);overflow:hidden;max-width:340px">
+        <div style="height:100%;width:${bar}%;background:var(--accent,#3a7)"></div></div>
+      ${warn}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:.6em">${quick}</div>
+    </div>`;
+  }
+
+  function wireXpPanel(c) {
+    document.querySelectorAll('[data-xp-add]').forEach(b => b.addEventListener('click', () => {
+      c.xp = Math.max(0, (parseInt(c.xp, 10) || 0) + (parseInt(b.dataset.xpAdd, 10) || 0));
+      save(); render();
+    }));
+    const next = $('[data-xp-next]');
+    if (next) next.addEventListener('click', () => {
+      c.xp = PF.xpProgress(c).nextThreshold || c.xp;
+      save(); render();
+    });
   }
 
   // ----- abilities -----

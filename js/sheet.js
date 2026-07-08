@@ -4,6 +4,26 @@
 const Sheet = (() => {
   const esc = Library.esc;
   const fmt = n => (n >= 0 ? '+' + n : String(n));
+  const nf = n => Number(n || 0).toLocaleString('en-US');
+
+  // "XP: 1,467 / 2,000 to Level 2" with a small progress bar
+  function xpLine(c) {
+    const x = PF.xpProgress(c);
+    let txt, bar;
+    if (x.nextThreshold == null) {
+      txt = `XP: ${nf(x.current)} — max level`;
+      bar = 100;
+    } else {
+      txt = `XP: ${nf(x.current)} / ${nf(x.nextThreshold)} to Level ${x.level + 1}`;
+      bar = x.pctToNext;
+    }
+    const flag = x.canLevel ? ` <span class="tag">ready to level up</span>` : '';
+    return `<div class="sheet-sec small muted" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span>${esc(txt)}${flag}</span>
+      <span style="flex:0 0 120px;height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden">
+        <span style="display:block;height:100%;width:${bar}%;background:currentColor;opacity:.55"></span></span>
+    </div>`;
+  }
 
   // hoverable reference: app.js shows a detail popover for these
   function ref(type, name, label, extra) {
@@ -40,6 +60,7 @@ const Sheet = (() => {
         ${[esc(c.alignment), race ? ref('races', race.name) : '', classesStr, 'Level ' + t.level].filter(Boolean).join(' • ')}
         ${c.deity ? ' • ' + esc(c.deity) : ''}${c.homeland ? ' • ' + esc(c.homeland) : ''}
       </div>
+      ${xpLine(c)}
       <div class="sheet-sec">`;
 
     // ability block

@@ -597,10 +597,6 @@
     return c;
   }
 
-  // cumulative XP needed for each level on the medium track (index 0 = L1)
-  const MEDIUM_XP = [0, 2000, 5000, 9000, 15000, 23000, 35000, 51000, 75000, 105000,
-    155000, 220000, 315000, 445000, 635000, 890000, 1300000, 1800000, 2550000, 3600000];
-
   function buildCharacter(picks) {
     const c = baseCharacter(picks);
     // separate RNG stream for build-time choices: reels stay seed+locks
@@ -613,7 +609,7 @@
     reconcilePrepared(c);                     // opposition ×2 cost / school-slot legality
     fixFocusNotes(c, picks);                  // record the school choice on Spell Focus-style feats
     applyGear(c, picks);
-    c.xp = MEDIUM_XP[Math.min(c.levels.length, 20) - 1] || 0;   // medium-track minimum
+    c.xp = PF.xpForLevel(c.levels.length, c.xpTrack || 'medium');   // track minimum for this level
     c.notes = 'Rolled by the Random Character Generator (seed ' + picks.seed + ').';
     return c;
   }
