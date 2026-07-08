@@ -184,6 +184,38 @@ for (const [cls, level, bundle, abilities] of bundleCombos) {
     ch.feats.map(f => f.name + ' [' + f.note + ']'));
 }
 
+// ---------------- named-skill trait bonuses (regression) ----------------
+// "Dangerously Curious" grants +1 on Use Magic Device (a single named skill).
+// It must NOT auto-apply as an all-skills bonus (skillMiscAll), which inflated
+// every skill and double-counted with the generator's per-skill skillMisc.
+{
+  const s = PF.newCharacter('Named Skill Trait');
+  s.race = 'Human'; s.flexChoice = 'cha';
+  s.abilities = { str: 10, dex: 14, con: 12, int: 12, wis: 10, cha: 15 };
+  s.levels.push({ cls: 'Rogue', archetypes: [], hp: null, fcb: '' });
+  s.traits = ['Dangerously Curious', 'Reactionary', 'Resilient', 'Deft Dodger'];
+  s.skills['Diplomacy'] = 1;
+  const fc = PF.featureChanges(s);
+  check('named-skill trait does not emit an all-skills change',
+    !fc.some(x => x.target === 'skills'), fc);
+  check('effective() skillMiscAll stays 0 with a named-skill trait',
+    (PF.effective(s).skillMiscAll || 0) === 0, PF.effective(s).skillMiscAll);
+  const es = PF.effective(s);
+  check('Diplomacy = 1 rank + 3 Cha + 3 class (no +all inflation)',
+    PF.skillBonus(es, 'Diplomacy') === 7, PF.skillBonus(es, 'Diplomacy'));
+  // always-on trait bonuses to specific defenses/init MUST still auto-apply
+  check('Reactionary still auto-applies +2 init',
+    fc.some(x => x.target === 'init' && x.value === 2), fc);
+  check('Resilient still auto-applies +1 Fort',
+    fc.some(x => x.target === 'fort' && x.value === 1), fc);
+  check('Deft Dodger still auto-applies +1 Ref',
+    fc.some(x => x.target === 'ref' && x.value === 1), fc);
+  // a genuine all-skills phrase must still map to the 'skills' target
+  check('genuine "all skill checks" bonus still maps to skills',
+    PF.parseChanges('<p>+2 competence bonus on all skill checks.</p>', { permanent: true })
+      .some(x => x.target === 'skills'));
+}
+
 // ---------------- result ----------------
 console.log('%d passed, %d failed', passed, failed);
 process.exit(failed ? 1 : 0);
