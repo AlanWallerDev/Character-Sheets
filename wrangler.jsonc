@@ -1,0 +1,13 @@
+{
+  // Cloudflare Workers config for deploying this static site as a Worker with
+  // Static Assets (no server-side script — it's a plain client-side app).
+  // Without this file, Cloudflare Workers Builds' default `npx wrangler deploy`
+  // has no entry-point/assets to deploy and the build check fails.
+  "name": "pf1echaractervault",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    // Serve the repo root: index.html + js/ css/ data/ vendor/ (all 36 tracked
+    // files; the large psrd/foundry/pfu source trees are gitignored).
+    "directory": "./"
+  }
+}
