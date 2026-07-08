@@ -1914,7 +1914,7 @@
           c.classAbilities.push({ name: a.name, cls });
           save(); render();
         }
-      }, { cacls: cls });
+      }, { cacls: cls, qualifyChar: c });
     }));
     main.querySelectorAll('[data-delability]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();

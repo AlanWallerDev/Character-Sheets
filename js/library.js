@@ -8,6 +8,17 @@ const Library = (() => {
 
   const uniq = arr => [...new Set(arr.filter(Boolean))].sort();
 
+  // Which pickers run the feat qualification pipeline (✓/✗/? badges + panel).
+  // Feats always qualify; class abilities only when the entry has a parsed
+  // prerequisite — coverage is partial, so we don't flash a green ✓ on the
+  // thousands of abilities whose (often prose-only) prereqs weren't parsed.
+  function showsQual(state, x) {
+    if (!state.qualifyChar) return false;
+    if (state.type === 'feats') return true;
+    if (state.type === 'classAbilities') return !!(x && x.prereq);
+    return false;
+  }
+
   const TYPES = {
     races: { label: 'Races', data: () => PFDATA.races },
     classes: { label: 'Classes', data: () => PFDATA.classes },
@@ -82,6 +93,12 @@ const Library = (() => {
       out.push(sel('acls', 'Class', uniq(PFDATA.archetypes.map(a => a.class))));
     } else if (type === 'classAbilities') {
       out.push(sel('cacls', 'Class', uniq((PFDATA.classAbilities || []).flatMap(a => a.classes || []))));
+      if (state.qualifyChar) {
+        out.push(`<select data-f="qual">
+          <option value="">Qualified: all</option>
+          <option value="yes" ${state.qual === 'yes' ? 'selected' : ''}>Qualified only</option>
+        </select>`);
+      }
     } else if (type === 'mythicAbilities') {
       out.push(sel('mpath', 'Path', uniq((PFDATA.mythicAbilities || []).map(a => a.path))));
       out.push(sel('mtier', 'Tier', uniq((PFDATA.mythicAbilities || []).map(a => a.tier && String(a.tier)))));
@@ -108,7 +125,7 @@ const Library = (() => {
         if (!extra.toLowerCase().includes(q)) return false;
       }
       if (type === 'feats' && state.ftype && !x.types.includes(state.ftype)) return false;
-      if (type === 'feats' && state.qual === 'yes' && state.qualifyChar &&
+      if ((type === 'feats' || type === 'classAbilities') && state.qual === 'yes' && state.qualifyChar &&
           PF.checkFeatPrereqs(state.qualifyChar, x).status === 'unmet') return false;
       if (type === 'spells') {
         if (state.cls && !(state.cls in x.levels)) return false;
@@ -287,6 +304,7 @@ const Library = (() => {
       case 'classAbilities':
         if (x.classes && x.classes.length) h += statLine('Class', esc(x.classes.join(', ')));
         if (x.kind) h += statLine('Type', esc(x.kind === 'Su' ? 'Supernatural' : x.kind === 'Ex' ? 'Extraordinary' : x.kind === 'Sp' ? 'Spell-like' : x.kind));
+        h += statLine('Prerequisites', esc(x.prereq));
         h += '<hr>' + (x.html || '');
         break;
       case 'mythicAbilities':
@@ -381,7 +399,7 @@ const Library = (() => {
             <div class="lib-results">
               ${ordered.map(({ x, depth }, i) => {
                 let badge = '';
-                if (state.type === 'feats' && state.qualifyChar) {
+                if (showsQual(state, x)) {
                   const st = PF.checkFeatPrereqs(state.qualifyChar, x).status;
                   badge = st === 'met' ? '<span class="ok" title="prerequisites met">✓</span> '
                         : st === 'unmet' ? '<span class="err" title="prerequisites not met">✗</span> '
@@ -398,7 +416,7 @@ const Library = (() => {
           <div class="lib-detail">
             ${opts.onPick && selected ? `<button class="primary" id="lib-pick" style="float:right">${esc(opts.pickLabel || 'Add')}</button>` : ''}
             ${selected && selected.custom ? `<button class="small danger" id="lib-del-custom" style="float:right;margin-right:8px">Delete homebrew</button>` : ''}
-            ${state.type === 'feats' && state.qualifyChar && selected ? prereqCheckHTML(state.qualifyChar, selected) : ''}
+            ${showsQual(state, selected) ? prereqCheckHTML(state.qualifyChar, selected) : ''}
             ${detailHTML(state.type, selected)}
           </div>
         </div>`;

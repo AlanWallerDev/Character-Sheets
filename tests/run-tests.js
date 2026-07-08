@@ -28,6 +28,7 @@ const src = files.map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n
 vm.runInContext(src, sandbox, { filename: 'app-bundle.js' });
 
 const PF = sandbox.__PF;
+const PFDATA = sandbox.PFDATA;
 const PFGEN = sandbox.PFGEN;
 const GEN = sandbox.PFGENDATA || {};
 
@@ -214,6 +215,62 @@ for (const [cls, level, bundle, abilities] of bundleCombos) {
   check('genuine "all skill checks" bonus still maps to skills',
     PF.parseChanges('<p>+2 competence bonus on all skill checks.</p>', { permanent: true })
       .some(x => x.target === 'skills'));
+}
+
+// ---------------- class-ability prerequisites ----------------
+// build_data now parses a `prereq` string from the "<strong>Prerequisite</strong>"
+// clause on class abilities, and the feat qualification pipeline is reused for
+// them: a clause naming another class ability is checked against c.classAbilities.
+{
+  const abils = PFDATA.classAbilities || [];
+  const withPre = abils.filter(a => a.prereq);
+  check('some class abilities carry a parsed prereq', withPre.length > 0, withPre.length);
+
+  const greater = abils.find(a => a.name === 'Elemental Whispers, Greater');
+  check('Elemental Whispers, Greater has a prereq', greater && /elemental whispers/i.test(greater.prereq || ''),
+    greater && greater.prereq);
+  check('base Elemental Whispers ability exists in data',
+    abils.some(a => a.name.toLowerCase() === 'elemental whispers'));
+
+  const kin = PF.newCharacter('Kineticist Test');
+  kin.levels.push({ cls: 'Kineticist', archetypes: [], hp: null, fcb: '' });
+  check('greater wild talent prereq unmet without the base talent',
+    PF.checkFeatPrereqs(kin, greater).status === 'unmet', PF.checkFeatPrereqs(kin, greater));
+  kin.classAbilities = [{ name: 'Elemental Whispers', cls: 'Kineticist' }];
+  check('greater wild talent prereq met once the base talent is chosen',
+    PF.checkFeatPrereqs(kin, greater).status === 'met', PF.checkFeatPrereqs(kin, greater));
+
+  // a class ability WITHOUT a parsed prereq reports met with no clauses
+  const noPre = abils.find(a => !a.prereq);
+  check('class ability with no prereq => met, zero clauses',
+    noPre && PF.checkFeatPrereqs(kin, noPre).status === 'met' &&
+      PF.checkFeatPrereqs(kin, noPre).clauses.length === 0, noPre && noPre.name);
+
+  // required class abilities must NOT leak into the feat-tree parent list
+  check('class-ability prereqs are not reported as feat parents',
+    PF.featParents(greater).length === 0, PF.featParents(greater));
+
+  // "greater X" prose is reconciled with a "X, Greater" entry name so the chain
+  // still checks (Gravity Master needs gravity control + greater gravity control)
+  const gm = abils.find(a => a.name === 'Gravity Master');
+  if (gm) {
+    const gk = PF.newCharacter('Gravity Kineticist');
+    gk.levels.push({ cls: 'Kineticist', archetypes: [], hp: null, fcb: '' });
+    gk.classAbilities = [
+      { name: 'Gravity Control', cls: 'Kineticist' },
+      { name: 'Gravity Control, Greater', cls: 'Kineticist' },
+    ];
+    const res = PF.checkFeatPrereqs(gk, gm);
+    check('Gravity Master met when both gravity-control talents are held',
+      res.status === 'met', res);
+    check('no Gravity Master prereq clause is left unverifiable',
+      res.clauses.every(cl => cl.status !== 'unknown'), res.clauses);
+  }
+
+  // feat prereq parsing is unchanged: feats never match class-ability names
+  // (allowAbilities is keyed off the entry's `classes` array, which feats lack)
+  check('feat clause parsing unaffected — Power Attack still met',
+    PF.checkFeatPrereqs(c, pa).status === 'met');
 }
 
 // ---------------- result ----------------

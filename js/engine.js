@@ -1285,6 +1285,7 @@ const PF = (() => {
   function invalidateCaches() {
     _buffLib = null;
     _featIndex = null;
+    _abilIndex = null;
   }
   function buffLibrary() {
     if (_buffLib) return _buffLib;
@@ -1473,6 +1474,14 @@ const PF = (() => {
     }
     return _featIndex;
   }
+  let _abilIndex = null;
+  function classAbilityIndex() {
+    if (!_abilIndex) {
+      _abilIndex = new Map();
+      for (const a of (PFDATA.classAbilities || [])) _abilIndex.set(a.name.toLowerCase(), a);
+    }
+    return _abilIndex;
+  }
 
   function casterLevelOf(c) {
     // approximate best caster level across classes (full/6-level: class level; 4-level: level-3)
@@ -1499,7 +1508,9 @@ const PF = (() => {
   }
 
   // parse one prerequisite clause -> {text, check(c) -> true|false|null}  (null = can't verify)
-  function parseClause(text) {
+  // allowAbilities: also recognise a clause naming another class ability the
+  // character must already possess (rage-power / talent / wild-talent chains).
+  function parseClause(text, allowAbilities) {
     const t = text.trim().replace(/\.$/, '');
     if (!t) return null;
     const lower = t.toLowerCase();
@@ -1555,6 +1566,22 @@ const PF = (() => {
                  return fn === lower || fn === target || fn.replace(/\s*\([^)]*\)\s*$/, '') === target;
                }) };
     }
+    // another class ability the character must already have (talent/power chains)
+    if (allowAbilities) {
+      const ai = classAbilityIndex();
+      // prereq prose says "greater X" but entries are named "X, Greater" — try that
+      // reorder too, accepting only an exact hit against a real ability name.
+      const reord = base.replace(/^(greater|improved|lesser|master)\s+(.+)$/, '$2, $1');
+      const target = ai.has(lower) ? lower : ai.has(base) ? base : ai.has(reord) ? reord : null;
+      if (target) {
+        return { text: t, kind: 'classAbility', abilityName: ai.get(target).name,
+                 check: c => (c.classAbilities || []).some(a => {
+                   const an = (a.name || '').toLowerCase();
+                   return an === lower || an === base || an === target ||
+                          an.replace(/\s*\([^)]*\)\s*$/, '') === base;
+                 }) };
+      }
+    }
     // unverifiable (class features, proficiencies, deity, mythic tiers…)
     return { text: t, check: () => null };
   }
@@ -1563,11 +1590,14 @@ const PF = (() => {
     if (feat.__pre !== undefined) return feat.__pre;
     const raw = (feat.prereq || '').trim();
     if (!raw) { feat.__pre = []; return feat.__pre; }
+    // Class-ability entries carry a `classes` array; their prereqs may name other
+    // class abilities. Feats have no `classes` field, so their parsing is unchanged.
+    const allowAbilities = Array.isArray(feat.classes);
     const clauses = [];
     for (const part of raw.split(/[;,]/)) {
       if (!part.trim()) continue;
       // handle "X or Y" alternatives within a clause
-      const alts = part.split(/\bor\b/i).map(s => parseClause(s)).filter(Boolean);
+      const alts = part.split(/\bor\b/i).map(s => parseClause(s, allowAbilities)).filter(Boolean);
       if (!alts.length) continue;
       if (alts.length === 1) clauses.push(alts[0]);
       else clauses.push({

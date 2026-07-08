@@ -1204,6 +1204,22 @@ def clean_foundry_html(html):
     return html
 
 
+def foundry_prereq(html):
+    # Class abilities that gate on something (another wild talent, a base talent,
+    # a race, etc.) lead with a "<strong>Prerequisite(s)</strong> …" clause —
+    # kineticist wild talents especially. Pull that clause out as plain text so it
+    # can be shown and machine-checked, mirroring how feats carry a `prereq` string.
+    # The clause is bounded by the next <br>/<strong>/</p>, so prose never runs away.
+    if not html:
+        return ''
+    m = re.search(r'<strong>\s*Prerequisites?\s*(?:&nbsp;|:|\s)*</strong>\s*(.*?)(?:<br|</p>|<strong>|$)',
+                  html, re.I | re.S)
+    if not m:
+        return ''
+    txt = re.sub(r'<[^>]+>', '', m.group(1)).replace('&nbsp;', ' ').replace('&amp;', '&')
+    return re.sub(r'\s+', ' ', txt).strip().strip(';').strip(',').strip()
+
+
 def foundry_spell_levels(learned):
     NORM = {'sorcerer/wizard': ['Sorcerer', 'Wizard'], 'cleric/oracle': ['Cleric', 'Oracle'],
             'unchained summoner': ['Summoner (Unchained)'], 'summoner (unchained)': ['Summoner (Unchained)']}
@@ -1295,13 +1311,17 @@ def extract_foundry_classfeatures():
             if nm and nm not in classes:
                 classes.append(nm)
         seen.add(name.lower())
-        out.append({
+        entry = {
             'name': name,
             'classes': classes,
             'kind': {'su': 'Su', 'ex': 'Ex', 'sp': 'Sp'}.get(s.get('abilityType'), ''),
             'source': COMPENDIUM_SRC,
             'html': html,
-        })
+        }
+        prereq = foundry_prereq(html)
+        if prereq:
+            entry['prereq'] = prereq
+        out.append(entry)
     return out
 
 
