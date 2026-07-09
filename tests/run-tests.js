@@ -400,6 +400,38 @@ if (PFGEN && typeof PFGEN.buildCharacter === 'function') {
   }
 }
 
+// ---------------- class progression tables (data integrity) ----------------
+// Every class must ship a complete progression table — 10 rows for prestige
+// classes, 20 for everything else — with a parseable BAB string and numeric
+// fort/ref/will in every row. An empty or gap-riddled table silently zeroes
+// totals() for that class (the shipped ACG Swashbuckler table once had no
+// rows at all, and Brawler's ref column was dropped by a header variant).
+for (const cls of PFDATA.classes) {
+  const prog = cls.prog || [];
+  const want = cls.subtype === 'prestige' ? 10 : 20;
+  check(cls.name + ' has ' + want + ' progression rows', prog.length === want, prog.length);
+  let bad = null;
+  prog.forEach((row, i) => {
+    const rowOk = row.level === i + 1 &&
+      /^\+?-?\d+/.test(row.bab || '') &&
+      ['fort', 'ref', 'will'].every(k => typeof row[k] === 'number');
+    if (!rowOk && !bad) bad = row;
+  });
+  check(cls.name + ' rows all have level/bab/fort/ref/will', bad === null, bad);
+}
+
+// regression: ACG header variants (Swashbuckler's bare "Bonus"/"Save" columns,
+// Brawler's "Reflex Save") must still yield real base values through totals()
+const swash = PF.newCharacter('Swash');
+for (let i = 0; i < 2; i++) swash.levels.push({ cls: 'Swashbuckler', archetypes: [], hp: null, fcb: '' });
+const swt = PF.totals(swash);
+check('swashbuckler 2 BAB = +2 (full BAB)', swt.bab === 2, swt);
+check('swashbuckler 2 base saves F0/R3/W0', swt.fort === 0 && swt.ref === 3 && swt.will === 0, swt);
+const brawler = PF.newCharacter('Brawler');
+for (let i = 0; i < 2; i++) brawler.levels.push({ cls: 'Brawler', archetypes: [], hp: null, fcb: '' });
+const brt = PF.totals(brawler);
+check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
+
 // ---------------- result ----------------
 console.log('%d passed, %d failed', passed, failed);
 process.exit(failed ? 1 : 0);

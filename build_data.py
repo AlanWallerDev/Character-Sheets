@@ -225,11 +225,40 @@ def parse_level_value(text):
     return int(m.group(1)) if m else None
 
 
+def canonical_class_cols(cols):
+    """Map header texts to canonical keys (level/bab/fort/ref/will/special/...).
+
+    Headers vary across books: "Ref Save" vs "Reflex Save", and some tables
+    (ACG Swashbuckler) lost the qualifier header row entirely, leaving a bare
+    "Bonus" plus three "Save" columns — those follow the standard Fort/Ref/Will
+    order, so bare "Save" columns are assigned positionally.
+    """
+    canon = []
+    bare_saves = 0
+    for col in cols:
+        cl = col.strip().lower()
+        if cl in ('base attack bonus', 'bonus', 'attack bonus'):
+            canon.append('bab')
+        elif cl in ('fort save', 'fortitude save'):
+            canon.append('fort')
+        elif cl in ('ref save', 'reflex save'):
+            canon.append('ref')
+        elif cl in ('will save',):
+            canon.append('will')
+        elif cl == 'save' and bare_saves < 3:
+            canon.append(('fort', 'ref', 'will')[bare_saves])
+            bare_saves += 1
+        else:
+            canon.append(cl)
+    return canon
+
+
 def parse_class_table(html):
     """Parse a class progression table -> list of per-level dicts."""
     t = parse_table(html)
     cols = flatten_header(t.head_rows)
-    if not cols or 'Base Attack Bonus' not in cols:
+    canon = canonical_class_cols(cols)
+    if not cols or 'bab' not in canon:
         return None
     levels = []
     for row in t.rows:
@@ -244,16 +273,16 @@ def parse_class_table(html):
             if i >= len(cells):
                 break
             v = cells[i]
-            cl = col.lower()
+            cl = canon[i]
             if cl == 'level':
                 continue
-            elif cl == 'base attack bonus':
+            elif cl == 'bab':
                 entry['bab'] = v
-            elif cl == 'fort save':
+            elif cl == 'fort':
                 entry['fort'] = parse_bonus(v)
-            elif cl == 'ref save':
+            elif cl == 'ref':
                 entry['ref'] = parse_bonus(v)
-            elif cl == 'will save':
+            elif cl == 'will':
                 entry['will'] = parse_bonus(v)
             elif cl == 'special':
                 entry['special'] = v
@@ -353,7 +382,9 @@ def extract_classes(books):
                 if s['type'] == 'table' and s.get('body'):
                     t = parse_table(s['body'])
                     cap = t.caption.lower()
-                    if cap == ('table: %s' % r['name']).lower():
+                    # some books caption the progression table "Table: <Name>",
+                    # others (ACG) just "<Name>"
+                    if cap in (('table: %s' % r['name']).lower(), r['name'].lower()):
                         prog = parse_class_table(s['body'])
                     elif cap.startswith('table:') and 'spells known' in cap:
                         spells_known = parse_spells_known_table(s['body'])
