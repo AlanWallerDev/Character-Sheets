@@ -136,7 +136,8 @@
   const sanGear = g => ({ name: toStr(g.name), kind: toStr(g.kind) || 'item', qty: toInt(g.qty, 1),
     equipped: !!g.equipped, cost: toStr(g.cost),
     weight: (g.weight == null || g.weight === '') ? null : toNum(g.weight), note: toStr(g.note),
-    enh: toInt(g.enh), mw: !!g.mw, special: toStr(g.special), dmgBonus: toStr(g.dmgBonus) });
+    enh: toInt(g.enh), mw: !!g.mw, special: toStr(g.special), dmgBonus: toStr(g.dmgBonus),
+    consumable: !!g.consumable });
   const sanRollLine = l => ({ d20: toInt(l.d20), mod: toInt(l.mod), total: toInt(l.total),
     dmg: toStr(l.dmg), bonus: toStr(l.bonus) });
   function sanRoll(r) {
@@ -1213,6 +1214,15 @@
         <b ${(g.qty || 0) <= 0 ? 'class="err"' : ''}>${g.qty || 0}</b>
         <button class="small" data-ammo="${gi}:1">+</button></span>`).join(' ');
 
+    // gear marked "consumable" gets the same one-tap tracker; empty stacks stay
+    // visible (greyed) so they can be restocked with + (ammo has its own row above)
+    const consumableRows = c.gear.map((g, gi) => ({ g, gi }))
+      .filter(x => x.g.consumable && !PF.gearIsAmmo(x.g)).map(({ g, gi }) =>
+      `<span style="white-space:nowrap;margin-right:10px" ${(g.qty || 0) <= 0 ? 'class="muted"' : ''}>${esc(PF.gearDisplayName(g))}
+        <button class="small" data-ammo="${gi}:-1">−</button>
+        <b ${(g.qty || 0) <= 0 ? 'class="err"' : ''}>${g.qty || 0}</b>
+        <button class="small" data-ammo="${gi}:1">+</button></span>`).join(' ');
+
     // skill chips for skills with ranks
     const skillChips = Object.keys(c.skills).filter(k => c.skills[k] > 0).sort()
       .map(name => rollChip(name, PF.skillBonus(e, name))).join(' ');
@@ -1441,6 +1451,7 @@
              ${rollChip('CMB', cm.cmb)}</p>
           ${weaponRows ? `<p><b class="small muted">ATTACKS</b><br>${weaponRows}</p>` : ''}
           ${ammoRows ? `<p><b class="small muted">AMMUNITION</b><br>${ammoRows}</p>` : ''}
+          ${consumableRows ? `<p><b class="small muted">CONSUMABLES</b> <span class="small muted">— mark items on the Gear tab</span><br>${consumableRows}</p>` : ''}
           ${skillChips ? `<p><b class="small muted">SKILLS</b><br>${skillChips}</p>` : ''}
           <p><b class="small muted">CUSTOM</b> <button class="small" id="add-custom-roll">+ add</button><br>
             ${(p.customRolls || []).map((cr, i) => customRollChip(cr.label || 'Roll', i, resolveCustomRoll(cr))).join(' ')}</p>
@@ -2357,6 +2368,8 @@
             const enchantable = g.kind === 'weapon' || g.kind === 'armor';
             return `<tr>
             <td><b>${esc(PF.gearDisplayName(g))}</b>
+              ${PF.gearIsAmmo(g) ? '' : `<label class="small muted" style="white-space:nowrap;margin-left:6px"
+                title="show as a one-tap quantity tracker on the Play tab"><input type="checkbox" data-gcons="${i}" ${g.consumable ? 'checked' : ''}> consumable</label>`}
               ${enchantable ? `<details class="small"><summary style="cursor:pointer;color:var(--accent)">✨ enchantment</summary>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:3px">
                   <label>+ <input class="tiny" type="number" min="0" max="10" data-genh="${i}" value="${g.enh || 0}" title="enhancement bonus"></label>
@@ -2385,12 +2398,15 @@
         </p>
         <p class="small muted">Check “Equipped” on armor/shields to apply AC, max-Dex and armor check penalties everywhere.</p>
       </div>`;
+    // names that are almost always spent-per-use — pre-check "consumable" (advisory; user can untoggle)
+    const CONSUMABLE_RE = /\b(holy water|potions?|oils?|scrolls?|antitoxin|antiplague|alchemist'?s fire|acid|tanglefoot|thunderstone|smokestick|sunrods?|tindertwig|elixirs?|rations|torch(es)?|candles?)\b/i;
     const addGear = (entry, kind) => {
       c.gear.push({
         name: entry.name, kind,
         qty: 1, equipped: kind === 'armor',
         weight: parseFloat(String(entry.weight || '').replace(/[^\d.]/g, '')) || 0,
         cost: entry.cost || entry.price || '', note: '',
+        consumable: kind === 'item' && CONSUMABLE_RE.test(entry.name || ''),
       });
       save(); render();
     };
@@ -2421,6 +2437,9 @@
     }));
     main.querySelectorAll('[data-gnote]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.gnote, 10)].note = el.value; save();
+    }));
+    main.querySelectorAll('[data-gcons]').forEach(el => el.addEventListener('change', () => {
+      c.gear[parseInt(el.dataset.gcons, 10)].consumable = el.checked; save(); render();
     }));
     main.querySelectorAll('[data-genh]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.genh, 10)].enh = Math.max(0, Math.min(10, parseInt(el.value, 10) || 0)); save(); render();
