@@ -13,7 +13,7 @@ const Library = (() => {
   // prerequisite — coverage is partial, so we don't flash a green ✓ on the
   // thousands of abilities whose (often prose-only) prereqs weren't parsed.
   function showsQual(state, x) {
-    if (!state.qualifyChar) return false;
+    if (!state.qualifyChar || !x) return false;
     if (state.type === 'feats') return true;
     if (state.type === 'classAbilities') return !!(x && x.prereq);
     return false;

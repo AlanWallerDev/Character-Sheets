@@ -1644,6 +1644,7 @@ const PF = (() => {
   }
 
   function featPrereqs(feat) {
+    if (!feat) return [];   // callers may pass a missing/unselected entry
     if (feat.__pre !== undefined) return feat.__pre;
     const raw = (feat.prereq || '').trim();
     if (!raw) { feat.__pre = []; return feat.__pre; }

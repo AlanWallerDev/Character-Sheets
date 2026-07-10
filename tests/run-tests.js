@@ -76,6 +76,12 @@ const weak = PF.newCharacter('Weak Wizard');
 weak.levels.push({ cls: 'Wizard', archetypes: [], hp: null, fcb: '' });
 check('Power Attack prereqs unmet for Str 10 wizard', PF.checkFeatPrereqs(weak, pa).status === 'unmet');
 
+// null/missing entries must not throw — the picker checks prereqs before any
+// row is selected, and app.js checks feats the data set doesn't contain
+check('featPrereqs(null) returns []', Array.isArray(PF.featPrereqs(null)) && PF.featPrereqs(null).length === 0);
+check('featPrereqs(undefined) returns []', Array.isArray(PF.featPrereqs(undefined)) && PF.featPrereqs(undefined).length === 0);
+check('checkFeatPrereqs with null feat is met, no throw', PF.checkFeatPrereqs(c, null).status === 'met');
+
 // shared weapon attack line
 c.gear.push({ name: 'Longsword', kind: 'weapon', qty: 1, equipped: true, weight: 4 });
 const wa = PF.weaponAttack(c, c.gear[0]);
