@@ -2356,11 +2356,18 @@
     // display-order sort (UI pref, shared across characters). Row controls carry
     // real gear indices, so sorting never reorders the saved gear array.
     const gsort = loadUiPrefs().gearSort || { key: '', dir: 1 };
+    // "1,500 gp", "5 sp", "3 pp", bare "20" (= gp) → gp number; unknown/— → 0
+    const costGp = g => {
+      const m = /([\d,]+(?:\.\d+)?)\s*(pp|gp|sp|cp)?\b/i.exec(String(g.cost || ''));
+      return m ? parseFloat(m[1].replace(/,/g, '')) * ({ pp: 10, gp: 1, sp: 0.1, cp: 0.01 }[(m[2] || 'gp').toLowerCase()]) : 0;
+    };
+    const gearGold = c.gear.reduce((s, g) => s + costGp(g) * (g.qty || 1), 0);
     const GEAR_SORTS = {
       name: x => PF.gearDisplayName(x.g).toLowerCase(),
       kind: x => x.g.kind + '|' + PF.gearDisplayName(x.g).toLowerCase(),
       qty: x => x.g.qty || 0,
       weight: x => x.g.weight != null ? x.g.weight : -1,
+      cost: x => costGp(x.g),
       eq: x => x.g.equipped ? 0 : 1,
     };
     const gearRows = c.gear.map((g, i) => ({ g, i }));
@@ -2390,7 +2397,7 @@
           </span>
         </div>
         <table class="data" style="margin-top:10px">
-          <tr>${th('name', 'Item')}${th('kind', 'Kind')}${th('qty', 'Qty', 'num')}${th('weight', 'Weight (ea)', 'num')}${th('eq', 'Equipped', 'num')}<th>Note</th><th></th></tr>
+          <tr>${th('name', 'Item')}${th('kind', 'Kind')}${th('qty', 'Qty', 'num')}${th('weight', 'Weight (ea)', 'num')}${th('cost', 'Value (ea)', 'num')}${th('eq', 'Equipped', 'num')}<th>Note</th><th></th></tr>
           ${gearRows.map(({ g, i }) => {
             const enchantable = g.kind === 'weapon' || g.kind === 'armor';
             return `<tr>
@@ -2407,14 +2414,17 @@
             </td><td class="small muted">${esc(g.kind)}</td>
             <td class="num"><input class="tiny" type="number" min="1" data-qty="${i}" value="${g.qty || 1}"></td>
             <td class="num"><input class="tiny" data-w="${i}" value="${esc(g.weight != null ? g.weight : '')}"></td>
+            <td class="num"><input class="tiny" style="width:64px" data-gcost="${i}" value="${esc(g.cost || '')}" placeholder="— gp"
+              title="value each — gp assumed if no unit (pp/gp/sp/cp)"></td>
             <td class="num"><input type="checkbox" data-eq="${i}" ${g.equipped ? 'checked' : ''}></td>
             <td><input style="width:140px" data-gnote="${i}" value="${esc(g.note || '')}"></td>
             <td><button class="small danger" data-delgear="${i}">✕</button></td>
-          </tr>`; }).join('') || '<tr><td class="muted" colspan="7">No gear yet.</td></tr>'}
+          </tr>`; }).join('') || '<tr><td class="muted" colspan="8">No gear yet.</td></tr>'}
         </table>
         <p>Total weight: <b class="${loadCls}">${load} lbs</b>
           — Light ≤ ${cap.light}, Medium ≤ ${cap.medium}, Heavy ≤ ${cap.heavy}
-          • Wealth ≈ <b>${PF.totalGold(c).toFixed(1)} gp</b></p>
+          • Coins ≈ <b>${PF.totalGold(c).toFixed(1)} gp</b>
+          • Gear value ≈ <b>${gearGold.toFixed(1)} gp</b> <span class="small muted">(value × qty)</span></p>
         <p class="small" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
           <span class="muted">Carrying capacity adjustments:</span>
           <label>+Str <input class="tiny" type="number" id="carry-str" value="${c.combat.carryStrBonus || 0}"
@@ -2464,6 +2474,9 @@
     }));
     main.querySelectorAll('[data-gnote]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.gnote, 10)].note = el.value; save();
+    }));
+    main.querySelectorAll('[data-gcost]').forEach(el => el.addEventListener('change', () => {
+      c.gear[parseInt(el.dataset.gcost, 10)].cost = el.value; save(); render();
     }));
     main.querySelectorAll('[data-gcons]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.gcons, 10)].consumable = el.checked; save(); render();
