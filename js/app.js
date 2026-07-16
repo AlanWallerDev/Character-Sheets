@@ -1215,13 +1215,18 @@
         <button class="small" data-ammo="${gi}:1">+</button></span>`).join(' ');
 
     // gear marked "consumable" gets the same one-tap tracker; empty stacks stay
-    // visible (greyed) so they can be restocked with + (ammo has its own row above)
+    // visible (greyed) so they can be restocked with + (ammo has its own row above).
+    // Sorted A→Z and laid out as aligned name/counter rows so long lists scan easily.
     const consumableRows = c.gear.map((g, gi) => ({ g, gi }))
-      .filter(x => x.g.consumable && !PF.gearIsAmmo(x.g)).map(({ g, gi }) =>
-      `<span style="white-space:nowrap;margin-right:10px" ${(g.qty || 0) <= 0 ? 'class="muted"' : ''}>${esc(PF.gearDisplayName(g))}
+      .filter(x => x.g.consumable && !PF.gearIsAmmo(x.g))
+      .sort((a, b) => PF.gearDisplayName(a.g).localeCompare(PF.gearDisplayName(b.g)))
+      .map(({ g, gi }) =>
+      `<span style="display:flex;align-items:center;gap:5px;min-width:0">
+        <span class="small${(g.qty || 0) <= 0 ? ' muted' : ''}" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${esc(PF.gearDisplayName(g))}">${esc(PF.gearDisplayName(g))}</span>
         <button class="small" data-ammo="${gi}:-1">−</button>
-        <b ${(g.qty || 0) <= 0 ? 'class="err"' : ''}>${g.qty || 0}</b>
-        <button class="small" data-ammo="${gi}:1">+</button></span>`).join(' ');
+        <b class="${(g.qty || 0) <= 0 ? 'err' : ''}" style="min-width:2.2ch;text-align:center">${g.qty || 0}</b>
+        <button class="small" data-ammo="${gi}:1">+</button></span>`).join('');
 
     // skill chips for skills with ranks
     const skillChips = Object.keys(c.skills).filter(k => c.skills[k] > 0).sort()
@@ -1451,7 +1456,8 @@
              ${rollChip('CMB', cm.cmb)}</p>
           ${weaponRows ? `<p><b class="small muted">ATTACKS</b><br>${weaponRows}</p>` : ''}
           ${ammoRows ? `<p><b class="small muted">AMMUNITION</b><br>${ammoRows}</p>` : ''}
-          ${consumableRows ? `<p><b class="small muted">CONSUMABLES</b> <span class="small muted">— mark items on the Gear tab</span><br>${consumableRows}</p>` : ''}
+          ${consumableRows ? `<div style="margin:1em 0"><b class="small muted">CONSUMABLES</b> <span class="small muted">— mark items on the Gear tab</span>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:3px 18px;margin-top:4px">${consumableRows}</div></div>` : ''}
           ${skillChips ? `<p><b class="small muted">SKILLS</b><br>${skillChips}</p>` : ''}
           <p><b class="small muted">CUSTOM</b> <button class="small" id="add-custom-roll">+ add</button><br>
             ${(p.customRolls || []).map((cr, i) => customRollChip(cr.label || 'Roll', i, resolveCustomRoll(cr))).join(' ')}</p>
