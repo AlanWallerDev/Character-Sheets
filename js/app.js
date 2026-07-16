@@ -2353,6 +2353,27 @@
     const cap = PF.carryCapacity(c);
     const load = PF.gearWeight(c);
     const loadCls = load > cap.medium ? 'err' : load > cap.light ? 'warn' : 'ok';
+    // display-order sort (UI pref, shared across characters). Row controls carry
+    // real gear indices, so sorting never reorders the saved gear array.
+    const gsort = loadUiPrefs().gearSort || { key: '', dir: 1 };
+    const GEAR_SORTS = {
+      name: x => PF.gearDisplayName(x.g).toLowerCase(),
+      kind: x => x.g.kind + '|' + PF.gearDisplayName(x.g).toLowerCase(),
+      qty: x => x.g.qty || 0,
+      weight: x => x.g.weight != null ? x.g.weight : -1,
+      eq: x => x.g.equipped ? 0 : 1,
+    };
+    const gearRows = c.gear.map((g, i) => ({ g, i }));
+    if (GEAR_SORTS[gsort.key]) {
+      const keyOf = GEAR_SORTS[gsort.key];
+      gearRows.sort((a, b) => {
+        const ka = keyOf(a), kb = keyOf(b);
+        return ka < kb ? -gsort.dir : ka > kb ? gsort.dir : a.i - b.i;   // ties keep added order
+      });
+    }
+    const th = (key, label, cls) => `<th class="${cls || ''}" data-gsort="${key}"
+      style="cursor:pointer;user-select:none${gsort.key === key ? ';color:var(--accent)' : ''}"
+      title="click to sort (again for reverse, again for added order)">${label}${gsort.key === key ? (gsort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
     main.innerHTML = `<h2>Gear & Wealth</h2>${statBar(c)}
       <div class="panel">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -2369,8 +2390,8 @@
           </span>
         </div>
         <table class="data" style="margin-top:10px">
-          <tr><th>Item</th><th>Kind</th><th class="num">Qty</th><th class="num">Weight (ea)</th><th class="num">Equipped</th><th>Note</th><th></th></tr>
-          ${c.gear.map((g, i) => {
+          <tr>${th('name', 'Item')}${th('kind', 'Kind')}${th('qty', 'Qty', 'num')}${th('weight', 'Weight (ea)', 'num')}${th('eq', 'Equipped', 'num')}<th>Note</th><th></th></tr>
+          ${gearRows.map(({ g, i }) => {
             const enchantable = g.kind === 'weapon' || g.kind === 'armor';
             return `<tr>
             <td><b>${esc(PF.gearDisplayName(g))}</b>
@@ -2446,6 +2467,13 @@
     }));
     main.querySelectorAll('[data-gcons]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.gcons, 10)].consumable = el.checked; save(); render();
+    }));
+    main.querySelectorAll('[data-gsort]').forEach(el => el.addEventListener('click', () => {
+      const k = el.dataset.gsort;
+      // cycle per column: ascending → descending → back to added order
+      const next = gsort.key !== k ? { key: k, dir: 1 }
+        : gsort.dir > 0 ? { key: k, dir: -1 } : { key: '', dir: 1 };
+      saveUiPref('gearSort', next); render();
     }));
     main.querySelectorAll('[data-genh]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.genh, 10)].enh = Math.max(0, Math.min(10, parseInt(el.value, 10) || 0)); save(); render();
