@@ -64,7 +64,9 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 - **Race** — every race with parsed size, speed, languages and racial traits; alternate racial
   trait picker.
 - **Classes** — level-by-level multiclassing, favored class bonuses, average/rolled/max HP, full
-  progression tables in-app. Pick **archetypes** and their replaced/altered features are applied —
+  progression tables in-app, and a **level-up checklist** that aggregates everything still
+  outstanding (unspent skill points, open feat slots, unassigned ability increases, missing HP
+  rolls, unchosen FCBs, open spells-known) with jump links to the right tab. Pick **archetypes** and their replaced/altered features are applied —
   swapped-out base features are struck from the sheet — and add **class abilities** (rage powers,
   bloodlines, hexes, arcana, discoveries, revelations, talents) from a searchable picker. The class
   dropdown remembers your last pick so adding several levels in a row is quick.

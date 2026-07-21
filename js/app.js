@@ -2092,6 +2092,7 @@
     const clsOptions = `<optgroup label="Core / Base / Hybrid">${playable.map(opt).join('')}</optgroup>
       <optgroup label="Prestige / NPC">${others.map(opt).join('')}</optgroup>`;
     main.innerHTML = `<h2>Classes & Levels</h2>${statBar(c)}
+      ${checklistPanel(c)}
       <div class="row">
         <div class="panel" style="flex:3">
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -2180,6 +2181,60 @@
       });
     }));
     attachRefPopovers(main, c);
+  }
+
+  // Everything still outstanding on this build, aggregated from the same engine
+  // math each tab uses — so a player leveling up can see all the loose ends at
+  // once instead of hunting through tabs. -> [{msg, tab}]
+  function levelChecklist(c) {
+    const out = [];
+    if (!c.levels.length) return out;
+    const x = PF.xpProgress(c);
+    if (x.canLevel) out.push({ msg: `XP allows Level ${x.level + 1} — add a class level`, tab: null });
+    const budget = PF.skillPointsBudget(c), spent = PF.skillPointsSpent(c);
+    if (spent < budget) out.push({ msg: `${budget - spent} skill point${budget - spent > 1 ? 's' : ''} unspent`, tab: 'skills' });
+    else if (spent > budget) out.push({ msg: `${spent - budget} skill point${spent - budget > 1 ? 's' : ''} over budget`, tab: 'skills' });
+    const fa = PF.featAllowance(c);
+    if (c.feats.length < fa.total) out.push({ msg: `${fa.total - c.feats.length} feat slot${fa.total - c.feats.length > 1 ? 's' : ''} open (${c.feats.length} of ~${fa.total})`, tab: 'feats' });
+    else if (c.feats.length > fa.total) out.push({ msg: `${c.feats.length - fa.total} feat${c.feats.length - fa.total > 1 ? 's' : ''} over the usual allowance`, tab: 'feats' });
+    const incDue = Math.floor(c.levels.length / 4), incHave = sumVals(c.levelIncreases);
+    if (incHave < incDue) out.push({ msg: `${incDue - incHave} ability score increase${incDue - incHave > 1 ? 's' : ''} unassigned (+1 at levels 4, 8, 12…)`, tab: 'abilities' });
+    else if (incHave > incDue) out.push({ msg: `${incHave - incDue} more ability increase${incHave - incDue > 1 ? 's' : ''} assigned than levels grant`, tab: 'abilities' });
+    if (c.hpMode === 'roll') {
+      const missing = c.levels.filter((l, i) => i > 0 && !l.hp).length;
+      if (missing) out.push({ msg: `${missing} rolled HP value${missing > 1 ? 's' : ''} not entered (average is used meanwhile)`, tab: null });
+    }
+    if (c.favoredClass) {
+      const fcbMissing = c.levels.filter(l => l.cls === c.favoredClass && !l.fcb).length;
+      if (fcbMissing) out.push({ msg: `favored class bonus unchosen for ${fcbMissing} ${esc(c.favoredClass)} level${fcbMissing > 1 ? 's' : ''}`, tab: null });
+    }
+    for (const [clsName] of PF.classLevels(c)) {
+      const known = PF.spellsKnownRow(c, clsName);
+      if (!known) continue;
+      const selByLvl = {};
+      for (const s of c.spells.filter(s => s.cls === clsName)) selByLvl[s.lvl] = (selByLvl[s.lvl] || 0) + 1;
+      const open = [];
+      for (const [lvl, max] of Object.entries(known)) {
+        if (max == null) continue;
+        const sel = selByLvl[+lvl] || 0;
+        if (sel < max) open.push(`L${lvl}: ${max - sel}`);
+      }
+      if (open.length) out.push({ msg: `${esc(clsName)} spells known still open — ${open.join(', ')}`, tab: 'spells' });
+    }
+    const drawbacks = c.traits.filter(tn => { const tr = PFDATA.traits.find(t => t.name === tn); return tr && tr.category === 'Drawback'; }).length;
+    const regular = c.traits.length - drawbacks;
+    if (regular < 2 + drawbacks) out.push({ msg: `${2 + drawbacks - regular} character trait slot${2 + drawbacks - regular > 1 ? 's' : ''} open`, tab: 'feats' });
+    return out;
+  }
+
+  function checklistPanel(c) {
+    const items = levelChecklist(c);
+    if (!c.levels.length) return '';
+    if (!items.length) return `<div class="panel no-print"><p class="ok small" style="margin:0">✓ Nothing outstanding — skill points, feats, ability increases and spells known are all assigned.</p></div>`;
+    return `<div class="panel no-print"><h3 style="margin-top:0">Level-up checklist</h3>
+      <ul style="margin:.3em 0 .2em 1.2em;padding:0">
+        ${items.map(it => `<li class="small" style="margin:2px 0">⚠ ${it.msg}${it.tab ? ` — <a href="#" data-tab-jump="${it.tab}">go to tab</a>` : ''}</li>`).join('')}
+      </ul></div>`;
   }
 
   function renderClassSummary(c) {
