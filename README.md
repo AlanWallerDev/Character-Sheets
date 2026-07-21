@@ -14,6 +14,8 @@ Everything is static — open it however you like:
 
 Characters are saved automatically in your browser (localStorage). Use **Export** on a
 character card to back one up as a JSON file, and **Import JSON** to restore or share.
+**💾 Export All** writes a single backup file with every character *and* your homebrew
+database; importing that file merges it back (same character: the newer version wins).
 
 On narrow screens (phones, small windows) the layout adapts: the side menu starts collapsed to
 free up space and opens as an overlay from the floating **☰** button (closing again when you pick

@@ -54,14 +54,58 @@
     try { localStorage.setItem(UI_PREF, JSON.stringify(p)); } catch (e) { /* non-critical */ }
   }
 
-  function exportCharacter(c) {
-    if (!c) return;
-    const blob = new Blob([JSON.stringify(c, null, 2)], { type: 'application/json' });
+  function downloadJSON(obj, filename) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = ((c.name || 'character').replace(/[^\w\- ]/g, '').trim() || 'character') + '.json';
+    a.download = filename;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function exportCharacter(c) {
+    if (!c) return;
+    downloadJSON(c, ((c.name || 'character').replace(/[^\w\- ]/g, '').trim() || 'character') + '.json');
+  }
+
+  // whole-vault backup: every character plus the homebrew database in one file
+  function exportVault() {
+    const d = new Date();
+    const stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    downloadJSON({
+      app: 'pf1e-character-vault', kind: 'vault', exported: Date.now(),
+      characters, homebrew: Custom.loadStore(),
+    }, 'pf1e-vault-backup-' + stamp + '.json');
+  }
+
+  // Merge a vault bundle (or bare character array) into the roster: same id →
+  // newer `updated` wins (mirrors the two-tab save merge); unknown ids are added.
+  // Homebrew entries are added when the name is free — their HTML is sanitized
+  // in Custom.addImported, since a shared file could carry arbitrary markup.
+  function importVault(bundle) {
+    const chars = (Array.isArray(bundle) ? bundle : bundle.characters || []).map(patch);
+    let added = 0, updated = 0, kept = 0, hb = 0;
+    for (const inc of chars) {
+      const i = characters.findIndex(x => x.id === inc.id);
+      if (i < 0) { characters.push(inc); added++; }
+      else if ((inc.updated || 0) > (characters[i].updated || 0)) { characters[i] = inc; updated++; }
+      else kept++;
+    }
+    const store = !Array.isArray(bundle) && bundle.homebrew;
+    if (store && typeof store === 'object' && !Array.isArray(store)) {
+      for (const [type, entries] of Object.entries(store)) {
+        if (!Array.isArray(entries)) continue;
+        for (const e of entries) { if (Custom.addImported(type, e)) hb++; }
+      }
+    }
+    save();
+    const parts = [];
+    if (added) parts.push(added + ' character' + (added > 1 ? 's' : '') + ' added');
+    if (updated) parts.push(updated + ' updated to the backup’s newer version');
+    if (kept) parts.push(kept + ' already up to date');
+    if (hb) parts.push(hb + ' homebrew entr' + (hb > 1 ? 'ies' : 'y') + ' added');
+    uiAlert(parts.length ? 'Import complete: ' + parts.join(', ') + '.' : 'Nothing to import in that file.',
+      { title: 'Vault import' });
   }
 
   window.addEventListener('storage', e => {
@@ -418,6 +462,7 @@
         <button class="primary" id="new-char">+ New Character</button>
         <button id="gen-char">🎲 Random Character</button>
         <button id="import-char">Import JSON</button>
+        ${characters.length ? '<button id="export-vault" title="One backup file with every character and your homebrew database">💾 Export All</button>' : ''}
         <input type="file" id="import-file" accept=".json" style="display:none">
       </div>
       <div class="roster-grid" id="roster"></div>`;
@@ -462,6 +507,8 @@
       render();
     });
     $('#gen-char').addEventListener('click', () => { state.view = 'generator'; render(); });
+    const expVault = $('#export-vault');
+    if (expVault) expVault.addEventListener('click', exportVault);
     $('#import-char').addEventListener('click', () => $('#import-file').click());
     $('#import-file').addEventListener('change', e => {
       const f = e.target.files[0];
@@ -470,18 +517,23 @@
       r.onload = () => {
         try {
           const raw = JSON.parse(r.result);
+          // vault backup (or a bare array of characters) → merge everything
+          if (Array.isArray(raw) || (raw && typeof raw === 'object' && Array.isArray(raw.characters))) {
+            importVault(raw); render(); return;
+          }
           // patch() would coerce anything into an empty "Unnamed" character —
           // reject files that clearly aren't a single-character export instead
-          if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
+          if (!raw || typeof raw !== 'object' ||
               (typeof raw.name !== 'string' && !raw.abilities && !raw.levels)) {
-            throw new Error('this is not a character export (expected a single character\'s JSON object)');
+            throw new Error('this is not a character or vault export (expected a character object or a vault backup)');
           }
           const c = patch(raw);
-          c.id = 'pc_' + Date.now().toString(36);
+          c.id = 'pc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
           characters.push(c); save(); render();
         } catch (err) { uiAlert('Could not read character file: ' + err.message, { title: 'Import failed' }); }
       };
       r.readAsText(f);
+      e.target.value = '';   // allow re-importing the same file
     });
     grid.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
