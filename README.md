@@ -99,7 +99,10 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   (flags disabled/dying/unconscious), spell-slot expenditure per class and level, and a **Rest**
   button (restores slots, clears nonlethal, heals level HP — and heals companions their HD).
   - **Buffs & conditions** with proper bonus-type stacking that live-update AC, saves, attacks,
-    skills and speed. The **+ Buff / Spell Effect** picker covers the **entire spell database**
+    skills and speed. Any effect can carry a **rounds counter** — the **⏱ Next round** button
+    ticks every timed effect (companions' too) and switches them off when they expire. A
+    Play-tab tracker also covers **ability damage/drain** (lowers the live scores, Con damage
+    lowers max HP, Rest heals 1/night) and **negative levels** (−1 attacks/saves/checks, −5 HP each). The **+ Buff / Spell Effect** picker covers the **entire spell database**
     (~2,950 entries, searchable by class/level/school): the 25 hand-curated effects (Haste,
     Bull's Strength…) carry precise mechanics, and every other spell has its bonuses **auto-parsed
     from its description**; anything the parser can't read is still addable as a tracked effect and

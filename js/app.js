@@ -173,6 +173,8 @@
     if (b.custom) out.custom = true;
     if (b.fromSpell) out.fromSpell = true;
     if (b.scales) out.scales = true;
+    // rounds remaining (optional duration): null/absent = untimed
+    if (b.rounds != null && b.rounds !== '') out.rounds = Math.max(0, toInt(b.rounds));
     return out;
   }
   // weight: keep "unknown" as null (not 0) so gearWeight() can fall back to the
@@ -206,9 +208,14 @@
     if (p.spellsCast && typeof p.spellsCast === 'object') {
       for (const [cls, m] of Object.entries(p.spellsCast)) spellsCast[cls] = intMap(m);
     }
+    const abilityDamage = {};
+    if (p.abilityDamage && typeof p.abilityDamage === 'object') {
+      for (const ab of PF.ABILITIES) { const v = toInt(p.abilityDamage[ab]); if (v > 0) abilityDamage[ab] = v; }
+    }
     return {
       hpDamage: toInt(p.hpDamage), hpTemp: toInt(p.hpTemp), nonlethal: toInt(p.nonlethal),
       mythicUsed: toInt(p.mythicUsed), slotsUsed, spellsCast,
+      abilityDamage, negLevels: Math.max(0, toInt(p.negLevels)),
       buffs: objArr(p.buffs, sanBuff),
       counters: objArr(p.counters, k => ({ name: toStr(k.name), cur: toInt(k.cur), max: toInt(k.max) })),
       rolls: objArr(p.rolls, sanRoll).slice(0, 30),
@@ -1420,6 +1427,8 @@
           ${(cp.buffs || []).map((b, bi) => `<span class="pill ${b.active ? 'gold' : ''}" style="white-space:nowrap"
               title="${esc(Library.changesText(b.changes) || b.note || '')}">
             <input type="checkbox" data-comp-buffact="${ci}:${bi}" ${b.active ? 'checked' : ''}> ${esc(b.name)}
+            ⏱<input class="tiny" style="width:38px;padding:2px 3px" type="number" min="0" data-comp-brounds="${ci}:${bi}"
+              value="${b.rounds != null ? b.rounds : ''}" placeholder="∞" title="rounds remaining — blank for untimed">
             <a href="#" data-comp-buffdel="${ci}:${bi}">✕</a></span>`).join(' ')}
         </div>
         <div class="small" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px">
@@ -1492,7 +1501,7 @@
         ${(() => { const sb = PF.speedBreakdown(e); return `<span class="stat-big" title="${esc(speedTitleText(sb))}"><span class="v">${sb.total} ft</span><span class="l">Speed</span></span>`; })()}
         ${buffed ? '<span class="pill gold" title="active buffs/conditions are applied to these numbers">⚡ live</span>' : ''}
         <span style="flex:1"></span>
-        <button id="rest-btn" title="Restores spell slots, refills capped trackers, removes nonlethal damage, heals character level in HP">🌙 Rest</button>
+        <button id="rest-btn" title="Restores spell slots, refills capped trackers, removes nonlethal damage, heals character level in HP and 1 point of each ability damage">🌙 Rest</button>
       </div>
 
       <div class="row">
@@ -1510,6 +1519,22 @@
             p.nonlethal > hp.current ? '<p class="warn">Unconscious (nonlethal exceeds current HP)</p>'
             : p.nonlethal === hp.current ? '<p class="warn">Staggered (nonlethal equals current HP)</p>' : '') : ''}
           ${(() => {
+            const hasPen = PF.hasPlayPenalties(c);
+            const ad = p.abilityDamage || {};
+            return `<details class="small" style="margin-top:8px"${hasPen ? ' open' : ''}>
+              <summary style="cursor:pointer;color:var(--accent)">Ability damage &amp; negative levels${hasPen ? ' <span class="warn">●</span>' : ''}</summary>
+              <div class="stat-mini-row" style="margin-top:4px">
+                ${PF.ABILITIES.map(ab => `<label class="stat-mini">${ab.toUpperCase()}
+                  <input class="tiny" type="number" min="0" data-abdmg="${ab}" value="${ad[ab] || ''}" placeholder="0"
+                    title="${PF.ABILITY_NAMES[ab]} damage/drain — lowers the score while set; heals 1 on Rest"></label>`).join('')}
+                <label class="stat-mini warn">Neg. levels
+                  <input class="tiny" type="number" min="0" data-neglvl value="${p.negLevels || ''}" placeholder="0"
+                    title="each: −1 attacks, saves, checks; −5 HP"></label>
+              </div>
+              <div class="muted" style="margin-top:2px">Applied live to the stats above (like buffs); the printed sheet stays at base values. Rest heals 1 point of each ability damage.</div>
+            </details>`;
+          })()}
+          ${(() => {
             const carry = PF.carryCapacity(e), load = PF.gearWeight(c);
             const tier = load > carry.heavy ? '<span class="err">over capacity</span>'
               : load > carry.medium ? '<span class="err">heavy load</span>'
@@ -1523,12 +1548,15 @@
             <button class="primary small" id="add-buff">+ Buff / Spell Effect</button>
             <button class="primary small" id="add-cond">+ Condition</button>
             <button class="small" id="add-custom-buff">+ Custom</button>
+            ${(p.buffs || []).some(b => b.active && b.rounds > 0) || (c.companions || []).some(cp => ((cp.play || {}).buffs || []).some(b => b.active && b.rounds > 0))
+              ? '<button class="small" id="next-round" title="Advance one combat round — every timed effect (including companions\') ticks down; effects at 0 switch off">⏱ Next round</button>' : ''}
           </div>
           <table class="data small" style="margin-top:6px">
             ${(p.buffs || []).map((b, i) => `<tr>
               <td style="width:24px"><input type="checkbox" data-bact="${i}" ${b.active ? 'checked' : ''}></td>
               <td><b class="${b.active ? 'ok' : 'muted'}">${esc(b.name)}</b>
                 ${(b.custom || b.fromSpell) ? `<a href="#" class="small" data-bedit="${i}" style="margin-left:6px">edit</a>` : ''}
+                ${b.rounds === 0 && !b.active ? ' <span class="small warn">(expired)</span>' : ''}
                 <div class="small muted">${Library.changesText(b.changes) || ''}${b.note ? ' — ' + esc(b.note) : ''}</div>
                 ${b.scales ? '<div class="small warn">scales with level — edit values below</div>' : ''}
                 ${b.active && b.changes && b.changes.length ? `<details class="small"><summary style="cursor:pointer;color:var(--accent)">edit values</summary>
@@ -1536,6 +1564,8 @@
                     <input class="tiny" type="number" data-bval="${i}:${j}" value="${ch.value}"></label>`).join('')}
                 </details>` : ''}
               </td>
+              <td style="width:76px;white-space:nowrap" class="small">⏱ <input class="tiny" style="width:46px" type="number" min="0" data-brounds="${i}"
+                value="${b.rounds != null ? b.rounds : ''}" placeholder="∞" title="rounds remaining — blank for untimed"></td>
               <td style="width:30px"><button class="small danger" data-bdel="${i}">✕</button></td>
             </tr>`).join('') || '<tr><td class="muted">Nothing active. Add Haste, Rage, conditions…</td></tr>'}
           </table>
@@ -1621,6 +1651,11 @@
       p.mythicUsed = 0;
       p.nonlethal = 0;
       p.hpDamage = Math.max(0, (p.hpDamage || 0) - c.levels.length);
+      // natural healing: 1 point of ability damage per ability per night's rest
+      if (p.abilityDamage) for (const ab of Object.keys(p.abilityDamage)) {
+        p.abilityDamage[ab] -= 1;
+        if (p.abilityDamage[ab] <= 0) delete p.abilityDamage[ab];
+      }
       for (const comp of c.companions || []) {
         if (comp.play && comp.play.hpDamage) {
           const d = PF.companionDerived(c, comp);
@@ -1726,6 +1761,44 @@
       const [i, j] = el.dataset.bval.split(':');
       p.buffs[+i].changes[+j].value = parseInt(el.value, 10) || 0; save(); render();
     }));
+    main.querySelectorAll('[data-brounds]').forEach(el => el.addEventListener('change', () => {
+      const b = p.buffs[+el.dataset.brounds];
+      if (el.value === '') delete b.rounds;
+      else b.rounds = Math.max(0, parseInt(el.value, 10) || 0);
+      save(); render();
+    }));
+    main.querySelectorAll('[data-comp-brounds]').forEach(el => el.addEventListener('change', () => {
+      const [ci, bi] = el.dataset.compBrounds.split(':');
+      const b = c.companions[+ci].play.buffs[+bi];
+      if (el.value === '') delete b.rounds;
+      else b.rounds = Math.max(0, parseInt(el.value, 10) || 0);
+      save(); render();
+    }));
+    const nextRound = $('#next-round');
+    if (nextRound) nextRound.addEventListener('click', () => {
+      const expired = [];
+      const tick = (buffs, owner) => {
+        for (const b of buffs || []) {
+          if (!b.active || !(b.rounds > 0)) continue;
+          b.rounds -= 1;
+          if (b.rounds <= 0) { b.active = false; expired.push(owner ? owner + ': ' + b.name : b.name); }
+        }
+      };
+      tick(p.buffs, '');
+      for (const comp of c.companions || []) tick((comp.play || {}).buffs, comp.name || comp.type);
+      save(); render();
+      if (expired.length) showRollToast({ pure: true, label: 'Expired: ' + expired.join(', '), total: '⏱' });
+    });
+    main.querySelectorAll('[data-abdmg]').forEach(el => el.addEventListener('change', () => {
+      if (!p.abilityDamage) p.abilityDamage = {};
+      const v = Math.max(0, parseInt(el.value, 10) || 0);
+      if (v) p.abilityDamage[el.dataset.abdmg] = v; else delete p.abilityDamage[el.dataset.abdmg];
+      save(); render();
+    }));
+    const negEl = main.querySelector('[data-neglvl]');
+    if (negEl) negEl.addEventListener('change', () => {
+      p.negLevels = Math.max(0, parseInt(negEl.value, 10) || 0); save(); render();
+    });
     main.querySelectorAll('[data-slot]').forEach(b => b.addEventListener('click', () => {
       const [cls, lvl, d] = b.dataset.slot.split(':');
       const u = p.slotsUsed[cls] = p.slotsUsed[cls] || {};

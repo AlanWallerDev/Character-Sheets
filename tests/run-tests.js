@@ -438,6 +438,31 @@ for (let i = 0; i < 2; i++) brawler.levels.push({ cls: 'Brawler', archetypes: []
 const brt = PF.totals(brawler);
 check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
 
+// ---------------- ability damage & negative levels (play state) ----------------
+{
+  const pd = PF.newCharacter('Poisoned');
+  pd.abilities = { str: 14, dex: 10, con: 14, int: 10, wis: 10, cha: 10 };
+  for (let i = 0; i < 4; i++) pd.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+  pd.play = PF.newPlayState();
+  const baseHp = PF.hpBreakdown(pd).total;
+  pd.play.abilityDamage = { str: 4, con: 2 };
+  check('hasPlayPenalties sees ability damage', PF.hasPlayPenalties(pd));
+  const eff = PF.effective(pd);
+  check('ability damage lowers the effective score', PF.abilityScore(eff, 'str') === 10, PF.abilityScore(eff, 'str'));
+  check('Con damage lowers max HP via the Con modifier', PF.hpBreakdown(eff).total === baseHp - 4,
+    { base: baseHp, now: PF.hpBreakdown(eff).total });
+  check('sheet view (buffs:false) ignores play-state damage', PF.abilityScore(PF.effective(pd, { buffs: false }), 'str') === 14);
+  pd.play.abilityDamage = {};
+  pd.play.negLevels = 2;
+  const nl = PF.effective(pd);
+  const baseSv = PF.saves(pd, {});
+  check('negative levels subtract from attack', (nl.combat.miscAttack || 0) === -2, nl.combat.miscAttack);
+  check('negative levels subtract 5 HP each', PF.hpBreakdown(nl).total === baseHp - 10,
+    { base: baseHp, now: PF.hpBreakdown(nl).total });
+  check('negative levels subtract from all saves', PF.saves(nl).fort === PF.saves(PF.effective(pd, { buffs: false })).fort - 2,
+    { with: PF.saves(nl).fort });
+}
+
 // ---------------- stored gear is excluded from encumbrance ----------------
 {
   const sg = PF.newCharacter('Packrat');

@@ -1175,7 +1175,17 @@ const PF = (() => {
   }));
 
   function newPlayState() {
-    return { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, spellsCast: {}, buffs: [], counters: [], rolls: [], customRolls: [] };
+    return { hpDamage: 0, hpTemp: 0, nonlethal: 0, slotsUsed: {}, spellsCast: {}, buffs: [], counters: [], rolls: [], customRolls: [],
+             abilityDamage: {}, negLevels: 0 };
+  }
+
+  // true when the character carries live play-state penalties (ability damage /
+  // negative levels) that effective() must fold in alongside buffs
+  function hasPlayPenalties(c) {
+    const p = c.play || {};
+    if (p.negLevels > 0) return true;
+    const ad = p.abilityDamage || {};
+    return ABILITIES.some(ab => (ad[ab] || 0) !== 0);
   }
 
   // ---------- spell -> buff effect parsing ----------
@@ -1389,9 +1399,10 @@ const PF = (() => {
     const includeBuffs = !opts || opts.buffs !== false;
     const feats = featureChanges(c);
     const active = includeBuffs ? ((c.play || {}).buffs || []).filter(b => b.active) : [];
-    if (!feats.length && !active.length) return c;
+    const playPen = includeBuffs && hasPlayPenalties(c);
+    if (!feats.length && !active.length && !playPen) return c;
     const e = JSON.parse(JSON.stringify(c));
-    e.__buffed = active.length > 0;
+    e.__buffed = active.length > 0 || playPen;
     const buckets = {};
     for (const ch of feats) (buckets[ch.target] = buckets[ch.target] || []).push(ch);
     for (const b of active) {
@@ -1421,6 +1432,23 @@ const PF = (() => {
     // carry multiplier doesn't add — take the best multiplier among active effects
     if (buckets['carryMult']) cb.carryMult = Math.max(cb.carryMult || 1, ...buckets['carryMult'].map(ch => ch.value || 1));
     e.skillMiscAll = (e.skillMiscAll || 0) + t('skills');
+    // live play-state penalties (Play tab only, like buffs):
+    // ability damage/drain — lower the score directly; the ability modifier
+    // then drops 1 per 2 points, and Con damage feeds max HP via hpBreakdown
+    if (playPen) {
+      const p = c.play || {};
+      const ad = p.abilityDamage || {};
+      for (const ab of ABILITIES) if (ad[ab]) e.abilityMisc[ab] -= ad[ab];
+      // each negative level: −1 attacks, saves, skill & ability checks, −5 HP
+      const nl = p.negLevels || 0;
+      if (nl > 0) {
+        cb.miscAttack -= nl;
+        cb.miscFort -= nl; cb.miscRef -= nl; cb.miscWill -= nl;
+        e.skillMiscAll -= nl;
+        cb.hpMisc = (cb.hpMisc || 0) - 5 * nl;
+        cb.miscCMB = (cb.miscCMB || 0) - nl;
+      }
+    }
     return e;
   }
 
@@ -1724,7 +1752,7 @@ const PF = (() => {
     getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
     getCompSpecies, getFamiliarSpecies,
-    CONDITIONS, newPlayState, stackTotal, effective, currentHP, rollDice,
+    CONDITIONS, newPlayState, hasPlayPenalties, stackTotal, effective, currentHP, rollDice,
     buffLibrary, invalidateCaches, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
     featPrereqs, checkFeatPrereqs, featParents, casterLevelOf, maxSpellLevel,
     newCompanionPlay, companionAttacks,
