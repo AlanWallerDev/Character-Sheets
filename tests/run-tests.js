@@ -438,6 +438,28 @@ for (let i = 0; i < 2; i++) brawler.levels.push({ cls: 'Brawler', archetypes: []
 const brt = PF.totals(brawler);
 check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
 
+// ---------------- Str-to-damage multipliers ----------------
+{
+  const th = PF.newCharacter('Two-Hander');
+  th.abilities = { str: 16, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  for (let i = 0; i < 1; i++) th.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+  const gs = { name: 'Greatsword', kind: 'weapon', qty: 1, equipped: true };
+  const ls = { name: 'Longsword', kind: 'weapon', qty: 1, equipped: true };
+  check('greatsword is recognized as two-handed', PF.isTwoHandedWeapon(PF.getWeapon('Greatsword')));
+  check('two-handed damage = floor(Str × 1.5)', PF.weaponAttack(th, gs).dice === '2d6+4', PF.weaponAttack(th, gs).dice);
+  check('one-handed damage stays ×1', PF.weaponAttack(th, ls).dice === '1d8+3', PF.weaponAttack(th, ls).dice);
+  check('off-hand override halves the bonus', PF.weaponAttack(th, Object.assign({}, ls, { strMult: '0.5' })).dice === '1d8+1',
+    PF.weaponAttack(th, Object.assign({}, ls, { strMult: '0.5' })).dice);
+  check('×0 override drops Str entirely', PF.weaponAttack(th, Object.assign({}, ls, { strMult: '0' })).dice === '1d8',
+    PF.weaponAttack(th, Object.assign({}, ls, { strMult: '0' })).dice);
+  // Str penalties are never multiplied — a Str 8 two-hander takes the full −1, not −2
+  const weakTh = PF.newCharacter('Weak');
+  weakTh.abilities = { str: 8, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  weakTh.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+  check('Str penalty applied in full on a two-hander', PF.weaponAttack(weakTh, gs).dice === '2d6-1',
+    PF.weaponAttack(weakTh, gs).dice);
+}
+
 // ---------------- ability damage & negative levels (play state) ----------------
 {
   const pd = PF.newCharacter('Poisoned');

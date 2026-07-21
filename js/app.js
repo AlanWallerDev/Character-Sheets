@@ -183,7 +183,8 @@
     equipped: !!g.equipped, cost: toStr(g.cost),
     weight: (g.weight == null || g.weight === '') ? null : toNum(g.weight), note: toStr(g.note),
     enh: toInt(g.enh), mw: !!g.mw, special: toStr(g.special), dmgBonus: toStr(g.dmgBonus),
-    consumable: !!g.consumable, stored: !!g.stored });
+    consumable: !!g.consumable, stored: !!g.stored,
+    strMult: ['0', '0.5', '1', '1.5'].includes(String(g.strMult)) ? String(g.strMult) : '' });
   const sanRollLine = l => ({ d20: toInt(l.d20), mod: toInt(l.mod), total: toInt(l.total),
     dmg: toStr(l.dmg), bonus: toStr(l.bonus) });
   function sanRoll(r) {
@@ -2660,6 +2661,14 @@
                   ${(g.enh || 0) > 0 ? '' : `<label><input type="checkbox" data-gmw="${i}" ${g.mw ? 'checked' : ''}> masterwork</label>`}
                   <label>abilities <input style="width:130px" data-gspec="${i}" value="${esc(g.special || '')}" placeholder="${g.kind === 'weapon' ? 'flaming, keen' : 'fortification'}"></label>
                   ${g.kind === 'weapon' ? `<label>bonus dmg <input style="width:100px" data-gdmg="${i}" value="${esc(g.dmgBonus || '')}" placeholder="1d6 fire"></label>` : ''}
+                  ${g.kind === 'weapon' && !PF.gearIsAmmo(g) ? `<label title="Strength multiplier on damage — two-handed weapons default to ×1½ automatically">Str×
+                    <select data-gstrmult="${i}">
+                      <option value="" ${!g.strMult ? 'selected' : ''}>auto${PF.isTwoHandedWeapon(PF.getWeapon(g.name)) ? ' (×1½ two-handed)' : ' (×1)'}</option>
+                      <option value="1" ${g.strMult === '1' ? 'selected' : ''}>×1</option>
+                      <option value="1.5" ${g.strMult === '1.5' ? 'selected' : ''}>×1½ two-handed</option>
+                      <option value="0.5" ${g.strMult === '0.5' ? 'selected' : ''}>×½ off-hand</option>
+                      <option value="0" ${g.strMult === '0' ? 'selected' : ''}>none</option>
+                    </select></label>` : ''}
                 </div></details>` : ''}
             </td><td class="small muted">${esc(g.kind)}</td>
             <td class="num"><input class="tiny" type="number" min="1" data-qty="${i}" value="${g.qty || 1}"></td>
@@ -2753,6 +2762,9 @@
     }));
     main.querySelectorAll('[data-gstored]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.gstored, 10)].stored = el.checked; save(); render();
+    }));
+    main.querySelectorAll('[data-gstrmult]').forEach(el => el.addEventListener('change', () => {
+      c.gear[parseInt(el.dataset.gstrmult, 10)].strMult = el.value; save(); render();
     }));
   }
 

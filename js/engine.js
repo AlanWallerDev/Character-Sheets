@@ -564,6 +564,22 @@ const PF = (() => {
     /\b(javelin|dart|chakram|shuriken|sling|bolas|net|throwing)\b/i.test(w.name || '') &&
     !/blowgun|gun\b|firearm/i.test((w.name || '') + ' ' + (w.group || ''));
 
+  const isTwoHandedWeapon = w => !!w && /two-handed/i.test(w.group || '');
+
+  // Str-to-damage multiplier: an explicit per-gear override (g.strMult: '1',
+  // '1.5', '0.5', '0') wins; otherwise two-handed melee weapons get the ×1.5.
+  // Per the rules the multiplier only applies to a Str BONUS — a penalty is
+  // added in full (except ×0 = "no Str at all", an explicit user choice).
+  function strDamageMult(w, g) {
+    const o = parseFloat(g && g.strMult);
+    if (!isNaN(o) && o >= 0) return o;
+    return isTwoHandedWeapon(w) ? 1.5 : 1;
+  }
+  function strDamageBonus(strM, mult) {
+    if (mult === 0) return 0;
+    return strM >= 0 ? Math.floor(strM * mult) : strM;
+  }
+
   // ammunition deals no damage of its own (it modifies a launcher) and is named like ammo —
   // so it shouldn't appear as an attack line; it's tracked as a quantity instead
   function isAmmo(w) {
@@ -596,7 +612,9 @@ const PF = (() => {
     const abM = ranged ? abilityMod(c, 'dex') : abilityMod(c, meleeAttackAbility(c, w));
     const perAttack = abM + sizeM + mw.atk + (c.combat.miscAttack || 0);
     const mods = iterAttacks(totals(c).bab).map(b => b + perAttack);
-    const dmgMod = (ranged && !isThrownWeapon(w) ? 0 : abilityMod(c, 'str')) + mw.dmg + (c.combat.miscDamage || 0);
+    const strDmg = ranged && !isThrownWeapon(w) ? 0
+      : strDamageBonus(abilityMod(c, 'str'), strDamageMult(w, g));
+    const dmgMod = strDmg + mw.dmg + (c.combat.miscDamage || 0);
     const dm = w && /\d*d\d+/.exec(w.dmgM || '');
     const dice = dm ? dm[0] + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : '') : null;
     const dmgText = (w ? w.dmgM : '—') + (dmgMod ? ' ' + (dmgMod > 0 ? '+' + dmgMod : dmgMod) : '') +
@@ -1745,7 +1763,7 @@ const PF = (() => {
     classSkillSet, isClassSkill, skillPointsBudget, skillPointsSpent, skillBonus, skillAbility,
     armorCheckPenalty, acBreakdown, saves, combatManeuvers, speed, speedBreakdown,
     magicWeapon, magicArmor, gearDisplayName, isRangedWeapon, isAmmo, gearIsAmmo,
-    isFinesseWeapon, meleeAttackAbility, isThrownWeapon, weaponAttack,
+    isFinesseWeapon, meleeAttackAbility, isThrownWeapon, isTwoHandedWeapon, strDamageMult, weaponAttack,
     carryCapacity, gearWeight, casterInfo, spellOnClassList, bonusSlots, spellSlots, spellsKnownRow, spellDC,
     specialistInfo, spellSchoolOf, preparedSummary, spellFocusBonus,
     totalGold, num,

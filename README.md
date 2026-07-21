@@ -83,7 +83,9 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 - **Spells** — slots per day including ability-bonus slots, save DCs, spells known for
   spontaneous casters, and a spell browser filtered to your class's list.
 - **Gear** — weapons/armor/items with real stats; AC, max Dex, ACP, speed and encumbrance
-  computed from what you equip; money tracking. Each weapon/armor has an **✨ enchantment**
+  computed from what you equip; money tracking. Two-handed weapons automatically deal
+  ×1½ Str damage (with a per-weapon override for off-hand ×½ or no Str), and gear marked
+  **stored** (at camp, on the mule) is excluded from encumbrance. Each weapon/armor has an **✨ enchantment**
   editor (enhancement bonus, masterwork, special abilities, bonus damage dice) that feeds attack,
   damage, AC and the armor check penalty, displaying as e.g. "+1 Flaming Longsword" everywhere.
   **Ammunition** is recognized automatically and tracked as a quantity rather than listed as an
