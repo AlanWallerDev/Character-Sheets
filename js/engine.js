@@ -924,7 +924,7 @@ const PF = (() => {
       type: type || 'animal companion',
       name: '', species: '', form: 'Quadruped',
       effOverride: null, hpOverride: null, leadMod: 0,
-      abilityOverride: {}, miscNatArmor: 0,
+      abilityOverride: {}, miscNatArmor: 0, evolutions: [],
       attacks: '', tricks: '', gear: '', notes: '', linkedId: '',
     };
   }
@@ -962,6 +962,96 @@ const PF = (() => {
   }
   function getFamiliarSpecies(name) {
     return ((PFDATA.companions || {}).familiarSpecies || []).find(s => s.name === name) || null;
+  }
+
+  // ---------- eidolon evolutions ----------
+  const getEvolution = n => (PFDATA.evolutions || []).find(e =>
+    e.name.toLowerCase() === String(n || '').toLowerCase());
+
+  // Natural-attack evolutions the app can add to the eidolon's attack line.
+  // [Medium, Large, Huge damage dice, number of attacks per rank, secondary?]
+  const EVO_ATTACKS = {
+    'bite':        ['1d6', '1d8', '2d6', 1, false],
+    'claws':       ['1d4', '1d6', '1d8', 2, false],
+    'gore':        ['1d6', '1d8', '2d6', 1, false],
+    'slam':        ['1d8', '2d6', '2d8', 1, false],
+    'sting':       ['1d4', '1d6', '1d8', 1, false],
+    'tail slap':   ['1d6', '1d8', '2d6', 1, true],
+    'tentacle':    ['1d4', '1d6', '1d8', 1, true],
+    'pincers':     ['1d6', '1d8', '2d6', 2, true],
+    'wing buffet': ['1d4', '1d6', '1d8', 2, true],
+    'rake':        ['1d4', '1d6', '1d8', 2, false],
+  };
+
+  // Evolution points available (from the progression table) vs. spent.
+  function evolutionPool(c, comp) {
+    const lvl = companionEffLevel(c, comp);
+    const row = progRowByLevel((PFDATA.companions || {}).eidolonProg, lvl);
+    const max = row ? intIn(row['Evolution Pool']) : 0;
+    let spent = 0;
+    for (const ev of (comp.evolutions || [])) {
+      const e = getEvolution(ev.name);
+      if (e) spent += e.cost * Math.max(1, ev.ranks || 1);
+    }
+    return { max, spent, remaining: max - spent, over: spent > max };
+  }
+
+  // Base-form free evolutions (limbs, bite…) count toward prerequisites even
+  // though they cost no points — parsed from the form's "Free Evolutions" line.
+  function freeEvolutionBases(comp) {
+    const form = ((PFDATA.companions || {}).eidolonForms || []).find(f => f.name === comp.form);
+    const m = form && /Free Evolutions\s+([^.]+)\./.exec(form.text || '');
+    if (!m) return new Set();
+    return new Set(m[1].split(/,| or /i).map(s => s.trim().toLowerCase().split(' (')[0]).filter(Boolean));
+  }
+
+  // Unmet requirements for taking an evolution: minimum summoner level (the
+  // eidolon's effective level), base-form restriction, prerequisite evolutions.
+  function evolutionPrereqs(c, comp, evo) {
+    const reasons = [];
+    if (!evo) return { ok: true, reasons };
+    const lvl = companionEffLevel(c, comp);
+    if (evo.minLevel && lvl < evo.minLevel) reasons.push('summoner level ' + evo.minLevel + '+');
+    if (evo.forms && evo.forms.length && comp.form && !evo.forms.includes(comp.form)) {
+      reasons.push(evo.forms.join(' or ') + ' form only');
+    }
+    const haveBases = freeEvolutionBases(comp);
+    for (const x of (comp.evolutions || [])) haveBases.add(String(x.name).toLowerCase().split(' (')[0]);
+    for (const need of (evo.prereqEvos || [])) {
+      const base = String(need).split(' (')[0];
+      if (!haveBases.has(base)) reasons.push('needs the ' + need + ' evolution');
+    }
+    return { ok: reasons.length === 0, reasons };
+  }
+
+  // Aggregate the mechanically-applied effects of an eidolon's chosen
+  // evolutions. Only the cleanly quantifiable ones fold into the stat block;
+  // everything else is surfaced as a note (with its rules text still available
+  // in the picker / hover popover). -> { abil{}, natArmor, size|null, attacks:[{key,ranks}], notes:[] }
+  function eidolonEvolutionEffects(comp) {
+    const eff = { abil: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, natArmor: 0, size: null, attacks: [], notes: [] };
+    for (const ev of (comp.evolutions || [])) {
+      const e = getEvolution(ev.name);
+      if (!e) continue;
+      const ranks = Math.max(1, ev.ranks || 1);
+      const key = e.name.toLowerCase();
+      if (key === 'ability increase') {
+        const ab = String(ev.choice || '').toLowerCase().slice(0, 3);
+        if (ABILITIES.includes(ab)) eff.abil[ab] += 2 * ranks;
+        else eff.notes.push('Ability Increase — choose an ability');
+      } else if (key === 'improved natural armor') {
+        eff.natArmor += 2 * ranks;
+      } else if (key === 'large') {
+        eff.size = ranks >= 2 ? 'Huge' : 'Large';
+        eff.abil.str += 8 * ranks; eff.abil.con += 4 * ranks; eff.abil.dex -= 2 * ranks;
+        eff.natArmor += 2 * ranks;
+      } else if (EVO_ATTACKS[key]) {
+        eff.attacks.push({ key, ranks });
+      } else {
+        eff.notes.push(e.name + (ev.choice ? ' (' + ev.choice + ')' : '') + (ranks > 1 ? ' ×' + ranks : ''));
+      }
+    }
+    return eff;
   }
 
   function applyOverrides(abil, comp) {
@@ -1074,6 +1164,10 @@ const PF = (() => {
       }
       const sd = intIn(row['Str/Dex Bonus']);
       abil.str += sd; abil.dex += sd;
+      // chosen evolutions: ability boosts, size increase, natural armor, attacks
+      const evo = eidolonEvolutionEffects(comp);
+      for (const k of ABILITIES) abil[k] += evo.abil[k] || 0;
+      if (evo.size) size = evo.size;
       abil = applyOverrides(abil, comp);
       const hd = intIn(row['HD']);
       const good = intIn(row['Good Saves']), bad = intIn(row['Bad Save']);
@@ -1082,19 +1176,30 @@ const PF = (() => {
         const base = goodSaves.includes(s) ? good : bad;
         sv[s] = base + mod(s === 'fort' ? abil.con : s === 'ref' ? abil.dex : abil.wis);
       }
+      // append evolution natural attacks, scaled to the eidolon's (possibly enlarged) size,
+      // skipping any the base form already grants
+      const szIdx = /Huge|Gargantuan|Colossal/.test(size) ? 2 : /Large/.test(size) ? 1 : 0;
+      for (const a of evo.attacks) {
+        const spec = EVO_ATTACKS[a.key];
+        if (new RegExp('\\b' + a.key + '\\b', 'i').test(attacks)) continue;
+        const n = spec[3] * a.ranks;
+        attacks += (attacks ? ', ' : '') + (n > 1 ? n + ' ' : '') + a.key + ' (' + spec[szIdx] + ')';
+      }
       out.hd = hd; out.hdDie = 10;
       out.bab = intIn(row['BAB']);
       out.abilities = abil;
       out.saves = sv;
       out.size = size; out.speed = speed || '20 ft.';
-      out.natArmor = natBase + (comp.miscNatArmor || 0);
-      // table 'Armor Bonus' is the eidolon's total armor bonus (incl. base natural armor)
-      out.ac = 10 + intIn(row['Armor Bonus']) + mod(abil.dex) + (SIZE_MOD[size] || 0) + (comp.miscNatArmor || 0);
+      out.natArmor = natBase + evo.natArmor + (comp.miscNatArmor || 0);
+      // table 'Armor Bonus' is the eidolon's inherent (scaling) armor; evolution
+      // natural armor from Improved Natural Armor / Large adds on top
+      out.ac = 10 + intIn(row['Armor Bonus']) + evo.natArmor + mod(abil.dex) + (SIZE_MOD[size] || 0) + (comp.miscNatArmor || 0);
       out.attacks = attacks;
       out.hp = comp.hpOverride || (Math.floor(hd * 5.5) + mod(abil.con) * hd);
       out.skills = row['Skills']; out.feats = row['Feats'];
-      out.special = row['Special'];
-      out.extras['Evolution pool'] = row['Evolution Pool'];
+      out.special = [row['Special'], evo.notes.join(', ')].filter(Boolean).join(' • ');
+      const pool = evolutionPool(c, comp);
+      out.extras['Evolution pool'] = pool.spent + ' / ' + pool.max + (pool.over ? ' (over budget!)' : '');
       out.extras['Max attacks'] = row['Max. Attacks'];
       if (free) out.extras['Free evolutions'] = free;
       return out;
@@ -1770,6 +1875,7 @@ const PF = (() => {
     getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
     getCompSpecies, getFamiliarSpecies,
+    getEvolution, evolutionPool, evolutionPrereqs, eidolonEvolutionEffects,
     CONDITIONS, newPlayState, hasPlayPenalties, stackTotal, effective, currentHP, rollDice,
     buffLibrary, invalidateCaches, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
     featPrereqs, checkFeatPrereqs, featParents, casterLevelOf, maxSpellLevel,

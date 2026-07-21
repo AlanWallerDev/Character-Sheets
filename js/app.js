@@ -242,6 +242,7 @@
       name: toStr(comp.name), species: toStr(comp.species), form: toStr(comp.form) || 'Quadruped',
       effOverride: toIntOrNull(comp.effOverride), hpOverride: toIntOrNull(comp.hpOverride),
       leadMod: toInt(comp.leadMod), abilityOverride, miscNatArmor: toInt(comp.miscNatArmor),
+      evolutions: objArr(comp.evolutions, e => ({ name: toStr(e.name), ranks: Math.max(1, toInt(e.ranks, 1)), choice: toStr(e.choice) })),
       attacks: toStr(comp.attacks), tricks: toStr(comp.tricks), gear: toStr(comp.gear),
       notes: toStr(comp.notes), linkedId: toStr(comp.linkedId),
     };
@@ -684,6 +685,7 @@
         break;
       case 'companionSpecies': entry = PF.getCompSpecies(name); break;
       case 'familiarSpecies': entry = PF.getFamiliarSpecies(name); break;
+      case 'evolution': { const ev = PF.getEvolution(name); return ev ? Library.detailHTML('evolutions', ev) : null; }
       case 'gear': {
         const w = PF.getWeapon(name); if (w) { type = 'weapons'; entry = w; break; }
         const a = PF.getArmor(name); if (a) { type = 'armors'; entry = a; break; }
@@ -2768,6 +2770,103 @@
     }));
   }
 
+  // ----- eidolon evolutions -----
+  // some evolutions need a specifier the auto-apply / notes use: an ability for
+  // Ability Increase, an energy type, a skill name, etc.
+  function evoChoiceKind(name) {
+    const k = name.toLowerCase();
+    if (k === 'ability increase') return 'ability';
+    if (['resistance', 'immunity', 'energy attacks', 'breath weapon'].includes(k)) return 'energy';
+    if (k === 'skilled') return 'skill';
+    if (k === 'damage reduction') return 'text';
+    return null;
+  }
+
+  // The evolution manager shown on an eidolon's card: a pool meter, the chosen
+  // evolutions as pills (rank steppers for repeatable ones, a choice input where
+  // one's needed, prereq flags), and a "+ Evolution" picker.
+  function eidolonEvoPanel(c, comp, i) {
+    const pool = PF.evolutionPool(c, comp);
+    const chosen = comp.evolutions || [];
+    const meterCls = pool.over ? 'err' : 'ok';
+    const pills = chosen.map((ev, j) => {
+      const e = PF.getEvolution(ev.name);
+      const cost = e ? e.cost : '?';
+      const kind = evoChoiceKind(ev.name);
+      const pre = e ? PF.evolutionPrereqs(c, comp, e) : { ok: true, reasons: [] };
+      const ranks = Math.max(1, ev.ranks || 1);
+      let choiceHtml = '';
+      if (kind === 'ability') {
+        choiceHtml = `<select data-evochoice="${i}:${j}" style="padding:1px 3px">
+          <option value="">— ability —</option>
+          ${PF.ABILITIES.map(ab => `<option value="${ab}" ${String(ev.choice).toLowerCase().slice(0, 3) === ab ? 'selected' : ''}>${ab.toUpperCase()}</option>`).join('')}</select>`;
+      } else if (kind) {
+        const ph = kind === 'energy' ? 'fire, cold…' : kind === 'skill' ? 'skill' : 'type';
+        choiceHtml = `<input data-evochoice="${i}:${j}" value="${esc(ev.choice || '')}" placeholder="${ph}" style="width:72px;padding:1px 4px">`;
+      }
+      const rankHtml = (e && e.repeatable)
+        ? `<button class="small" data-evorank="${i}:${j}:-1" title="fewer">−</button><b title="ranks">${ranks}</b><button class="small" data-evorank="${i}:${j}:1" title="more">＋</button>`
+        : '';
+      return `<span class="pill ${pre.ok ? 'gold' : 'pill-unmet'}" style="white-space:nowrap">
+        <span class="ref" data-rt="evolution" data-rn="${esc(ev.name)}">${esc(ev.name)}</span>
+        <span class="muted">(${cost}pt${ranks > 1 ? '×' + ranks : ''})</span>
+        ${rankHtml} ${choiceHtml}
+        ${pre.ok ? '' : `<span class="err" title="${esc('Prereq: ' + pre.reasons.join('; '))}">⚠</span>`}
+        <a href="#" data-evodel="${i}:${j}" style="text-decoration:none">✕</a></span>`;
+    }).join(' ');
+    return `<div class="panel" style="margin:6px 0;padding:8px 12px;background:var(--bg2)">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <b style="color:var(--accent)">Evolutions</b>
+        <span class="pill ${meterCls}">${pool.spent} / ${pool.max} points${pool.over ? ' — over budget' : ''}</span>
+        <button class="small" data-addevo="${i}">+ Evolution</button>
+      </div>
+      <div style="margin-top:6px;line-height:2">${pills || '<span class="muted small">None chosen yet. The base form grants some evolutions free (bite, limbs…); spend the pool above on more.</span>'}</div>
+    </div>`;
+  }
+
+  function evolutionPicker(c, comp, onPick) {
+    const all = PFDATA.evolutions || [];
+    let q = '';
+    const m = openModal('Add Evolution — ' + (comp.name || 'eidolon'), '');
+    function draw() {
+      const pool = PF.evolutionPool(c, comp);
+      const list = all.filter(e => !q || e.name.toLowerCase().includes(q) || (e.desc || '').toLowerCase().includes(q));
+      m.body.innerHTML = `
+        <p class="small muted" style="margin:0 0 6px">Pool: <b class="${pool.over ? 'err' : 'ok'}">${pool.spent} / ${pool.max}</b> spent, ${pool.remaining} left.
+          You can still add evolutions that don't fit or qualify — they're flagged.</p>
+        <input id="evo-q" placeholder="Search evolutions…" value="${esc(q)}" style="width:100%;margin-bottom:8px">
+        <div style="max-height:52vh;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg2)">
+          ${[1, 2, 3, 4].map(cost => {
+            const rows = list.filter(e => e.cost === cost);
+            if (!rows.length) return '';
+            return `<div class="lib-count" style="position:sticky;top:0;background:var(--panel2)">${cost}-point evolutions</div>` + rows.map(e => {
+              const pre = PF.evolutionPrereqs(c, comp, e);
+              const afford = e.cost <= pool.remaining;
+              const flags = [];
+              if (!pre.ok) flags.push(`<span class="err">⚠ ${esc(pre.reasons.join('; '))}</span>`);
+              if (!afford) flags.push('<span class="warn">over budget</span>');
+              return `<div class="lib-row" data-evopick="${esc(e.name)}">
+                <div class="nm">${esc(e.name)} <span class="muted small">${e.cost}pt${e.repeatable ? ', repeatable' : ''}</span> ${flags.join(' ')}</div>
+                <div class="src">${esc(e.desc)}</div>
+              </div>`;
+            }).join('');
+          }).join('')}
+        </div>`;
+      const qEl = m.body.querySelector('#evo-q');
+      qEl.addEventListener('input', ev => {
+        q = ev.target.value.toLowerCase();
+        const pos = ev.target.selectionStart;
+        draw();
+        const nq = m.body.querySelector('#evo-q'); nq.focus(); nq.setSelectionRange(pos, pos);
+      });
+      m.body.querySelectorAll('[data-evopick]').forEach(el => el.addEventListener('click', () => {
+        m.close(); onPick(el.dataset.evopick);
+      }));
+    }
+    draw();
+    const q0 = m.body.querySelector('#evo-q'); if (q0) q0.focus();
+  }
+
   // ----- companions -----
   function compStatBlock(c, comp) {
     const d = PF.companionDerived(c, comp);
@@ -2848,10 +2947,11 @@
         </div>
         ${linked ? `<div class="small muted" style="margin-top:4px">Linked: ${esc(linked.name)} — ${esc(linked.race || '')} ${esc([...PF.classLevels(linked)].map(([k, v]) => k + ' ' + v).join('/'))}, level ${linked.levels.length}</div>` : ''}
         ${compStatBlock(c, comp)}
+        ${isEid ? eidolonEvoPanel(c, comp, i) : ''}
         <div class="grid2 small">
           <div class="field"><label>Attacks / combat notes</label>
             <textarea rows="2" data-catk="${i}">${esc(comp.attacks)}</textarea></div>
-          <div class="field"><label>${isEid ? 'Evolutions' : isFam ? 'Special abilities' : comp.type === 'follower' ? 'Follower roster' : 'Tricks / abilities'}</label>
+          <div class="field"><label>${isEid ? 'Evolution notes (free-form)' : isFam ? 'Special abilities' : comp.type === 'follower' ? 'Follower roster' : 'Tricks / abilities'}</label>
             <textarea rows="2" data-ctricks="${i}">${esc(comp.tricks)}</textarea></div>
           <div class="field"><label>Gear</label>
             <textarea rows="2" data-cgear="${i}">${esc(comp.gear)}</textarea></div>
@@ -2925,6 +3025,31 @@
     main.querySelectorAll('[data-cnat]').forEach(el => el.addEventListener('change', () => {
       c.companions[+el.dataset.cnat].miscNatArmor = parseInt(el.value, 10) || 0; save(); render();
     }));
+    // ---- eidolon evolutions ----
+    main.querySelectorAll('[data-addevo]').forEach(b => b.addEventListener('click', () => {
+      const comp = c.companions[+b.dataset.addevo];
+      evolutionPicker(c, comp, name => {
+        if (!Array.isArray(comp.evolutions)) comp.evolutions = [];
+        comp.evolutions.push({ name, ranks: 1, choice: '' });
+        save(); render();
+      });
+    }));
+    main.querySelectorAll('[data-evodel]').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      const [i, j] = a.dataset.evodel.split(':');
+      c.companions[+i].evolutions.splice(+j, 1); save(); render();
+    }));
+    main.querySelectorAll('[data-evorank]').forEach(b => b.addEventListener('click', () => {
+      const [i, j, d] = b.dataset.evorank.split(':');
+      const ev = c.companions[+i].evolutions[+j];
+      ev.ranks = Math.max(1, (ev.ranks || 1) + parseInt(d, 10));
+      save(); render();
+    }));
+    main.querySelectorAll('[data-evochoice]').forEach(el => el.addEventListener('change', () => {
+      const [i, j] = el.dataset.evochoice.split(':');
+      c.companions[+i].evolutions[+j].choice = el.value; save(); render();
+    }));
+    attachRefPopovers(main, c);
   }
 
   // ----- notes -----

@@ -16,7 +16,7 @@ const files = [
   'data/archetypes.js', 'data/classabilities.js', 'data/mythicabilities.js',
   'data/mythicpaths.js', 'data/mythicspells.js', 'data/feats.js', 'data/spells.js',
   'data/weapons.js', 'data/armors.js', 'data/items.js', 'data/traits.js',
-  'data/companions.js', 'data/buffs.js', 'data/bundles.js',
+  'data/companions.js', 'data/evolutions.js', 'data/buffs.js', 'data/bundles.js',
   'js/engine.js', 'js/generator.js',
 ];
 
@@ -437,6 +437,64 @@ const brawler = PF.newCharacter('Brawler');
 for (let i = 0; i < 2; i++) brawler.levels.push({ cls: 'Brawler', archetypes: [], hp: null, fcb: '' });
 const brt = PF.totals(brawler);
 check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
+
+// ---------------- eidolon evolutions ----------------
+{
+  check('evolution catalog loaded', (PFDATA.evolutions || []).length >= 40, (PFDATA.evolutions || []).length);
+  const ev = PF.newCharacter('Summoner');
+  for (let i = 0; i < 8; i++) ev.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
+  const eid = PF.newCompanion('eidolon');
+  eid.form = 'Quadruped';
+  ev.companions = [eid];
+
+  // pool: L8 summoner → 11 points; empty spend
+  check('L8 eidolon pool max = 11', PF.evolutionPool(ev, eid).max === 11, PF.evolutionPool(ev, eid).max);
+  check('empty pool spends 0', PF.evolutionPool(ev, eid).spent === 0);
+
+  eid.evolutions = [
+    { name: 'Improved Natural Armor', ranks: 2, choice: '' },  // 2pt
+    { name: 'Ability Increase', ranks: 1, choice: 'str' },     // 2pt
+    { name: 'Claws', ranks: 1, choice: '' },                   // 1pt
+    { name: 'Large', ranks: 1, choice: '' },                   // 4pt
+  ];
+  const pool = PF.evolutionPool(ev, eid);
+  check('pool spent = 2+2+1+4 = 9', pool.spent === 9, pool.spent);
+  check('pool not over budget at 9/11', pool.over === false, pool);
+
+  const eff = PF.eidolonEvolutionEffects(eid);
+  check('Improved Natural Armor ×2 → +4 natural armor (before Large)',
+    eff.natArmor === 6, eff.natArmor);   // INA +4 and Large +2
+  check('Ability Increase applies +2 to the chosen ability', eff.abil.str >= 2, eff.abil.str);
+  check('Large sets size to Large', eff.size === 'Large', eff.size);
+
+  const d = PF.companionDerived(ev, eid);
+  check('derived eidolon size is Large', d.size === 'Large', d.size);
+  // Quadruped Str 14 + L8 str/dex bonus (+3) + Ability Increase (+2) + Large (+8) = 27
+  check('Large + boosts fold into Str', d.abilities.str === 27, d.abilities.str);
+  check('evolution natural armor reaches the derived block', d.natArmor >= 6, d.natArmor);
+  check('claws appear in the attack line, size-scaled', /claws \(1d6\)/i.test(d.attacks), d.attacks);
+
+  // prerequisites: free-form-granted limbs satisfy Claws on a quadruped
+  check('Claws qualifies on a quadruped (free legs)',
+    PF.evolutionPrereqs(ev, eid, PF.getEvolution('Claws')).ok, PF.evolutionPrereqs(ev, eid, PF.getEvolution('Claws')).reasons);
+  // Pounce is quadruped-only
+  eid.form = 'Biped';
+  check('Pounce blocked on a biped (quadruped form only)',
+    !PF.evolutionPrereqs(ev, eid, PF.getEvolution('Pounce')).ok);
+  eid.form = 'Quadruped';
+  // Large is gated at summoner level 8
+  const ev4 = PF.newCharacter('Low Summoner');
+  for (let i = 0; i < 4; i++) ev4.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
+  const eid4 = PF.newCompanion('eidolon'); eid4.form = 'Quadruped'; ev4.companions = [eid4];
+  check('Large blocked below summoner level 8',
+    !PF.evolutionPrereqs(ev4, eid4, PF.getEvolution('Large')).ok,
+    PF.evolutionPrereqs(ev4, eid4, PF.getEvolution('Large')).reasons);
+
+  // over-budget detection
+  eid.evolutions = [{ name: 'Large', ranks: 1, choice: '' }, { name: 'Breath Weapon', ranks: 1, choice: 'fire' },
+    { name: 'Fast Healing', ranks: 1, choice: '' }, { name: 'Large', ranks: 1, choice: '' }];
+  check('pool flags over budget when overspent', PF.evolutionPool(ev, eid).over === true, PF.evolutionPool(ev, eid));
+}
 
 // ---------------- Str-to-damage multipliers ----------------
 {

@@ -1114,6 +1114,62 @@ def extract_companion_tables(books):
     return out
 
 
+# ---------------------------------------------------------------- eidolon evolutions
+# The Summoner eidolon's evolution catalog (APG), grouped in the source into
+# 1/2/3/4-point sections. Each evolution carries its point cost, whether it can
+# be taken more than once, any prerequisite evolutions / minimum summoner level
+# / base-form restriction (all parsed from the rules text), and the full text
+# for the picker and hover popovers. The app tracks these against the eidolon's
+# evolution pool and auto-applies the cleanly quantifiable ones.
+_FORM_WORDS = {'biped': 'Biped', 'quadruped': 'Quadruped', 'serpentine': 'Serpentine'}
+
+
+def parse_evolution(name, cost, body, source_name):
+    t = strip_html(body).lower()
+    prereq_evos = sorted({m.group(1).strip()
+                          for m in re.finditer(r'must have the ([a-z][a-z ()]*?) evolution', t)})
+    lvl = 0
+    m = re.search(r'must be at least (\d+)\w* level', t)
+    if m:
+        lvl = int(m.group(1))
+    forms = []
+    m = re.search(r'available to eidolons of the ([a-z]+)(?:\s+(?:and|or)\s+([a-z]+))? base forms?', t)
+    if m:
+        forms = [_FORM_WORDS[g] for g in m.groups() if g in _FORM_WORDS]
+    # repeatable if the text says so directly ("more than once") or gates repeats
+    # on level ("can be taken once for every five levels"). The "taken/selected"
+    # anchor avoids matching passive scaling ("resistance increases … for every").
+    repeatable = 'more than once' in t or bool(
+        re.search(r'(?:taken|selected|applied)\b[^.]*\bfor every\b', t))
+    return {
+        'name': name,
+        'cost': cost,
+        'source': source_name,
+        'repeatable': repeatable,
+        'prereqEvos': prereq_evos,
+        'minLevel': lvl,
+        'forms': forms,
+        'desc': strip_html(body)[:150],
+        'html': '<h4>%s</h4>%s' % (name, body),
+    }
+
+
+def extract_eidolon_evolutions(books):
+    apg = books['apg']
+    out = []
+    for r in apg.rows:
+        m = re.match(r'(\d)-Point Evolutions', r['name'] or '')
+        if not m:
+            continue
+        cost = int(m.group(1))
+        for ch in apg.kids(r['section_id']):
+            if not ch.get('name'):
+                continue
+            out.append(parse_evolution(ch['name'], cost, ch.get('body') or '', apg.name))
+    out.sort(key=lambda e: (e['cost'], e['name'].lower()))
+    return out
+
+
 def extract_familiar_species(books):
     out = []
     seen = set()
@@ -1933,6 +1989,7 @@ def main():
     write_js('traits.js', 'traits', extract_traits(books))
     write_js('skills.js', 'skills', extract_skills(books))
     write_js('companions.js', 'companions', extract_companions(books))
+    write_js('evolutions.js', 'evolutions', extract_eidolon_evolutions(books))
     write_js('classabilities.js', 'classAbilities', extract_foundry_classfeatures())
     write_js('mythicabilities.js', 'mythicAbilities', extract_mythic_abilities(books))
     write_js('mythicpaths.js', 'mythicPaths', extract_mythic_paths())

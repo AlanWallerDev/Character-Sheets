@@ -37,6 +37,7 @@ const Library = (() => {
     skills: { label: 'Skills', data: () => PFDATA.skills },
     companionSpecies: { label: 'Animal Companions', data: () => (PFDATA.companions || {}).species || [] },
     familiarSpecies: { label: 'Familiars', data: () => (PFDATA.companions || {}).familiarSpecies || [] },
+    evolutions: { label: 'Eidolon Evolutions', data: () => PFDATA.evolutions || [] },
     buffs: { label: 'Buffs & Spell Effects', data: () => PF.buffLibrary() },
     conditions: { label: 'Conditions', data: () => PF.CONDITIONS },
   };
@@ -173,6 +174,9 @@ const Library = (() => {
       case 'classes': return esc(x.subtype + ' — ' + x.source);
       case 'races': return esc(x.subtype + ' — ' + x.source);
       case 'skills': return esc((x.ability || '').toUpperCase() + (x.trained ? ' — trained only' : ''));
+      case 'evolutions': return esc(x.cost + '-point' + (x.repeatable ? ', repeatable' : '') +
+        (x.forms && x.forms.length ? ' — ' + x.forms.join('/') + ' only' : '') +
+        (x.minLevel ? ' — lvl ' + x.minLevel + '+' : ''));
       case 'companionSpecies': return esc([x.base && x.base.size, x.base && x.base.attack, x.source].filter(Boolean).join(' — '));
       case 'familiarSpecies': return esc([x.size, x.melee, x.source].filter(Boolean).join(' — '));
       case 'buffs': case 'conditions':
@@ -262,6 +266,14 @@ const Library = (() => {
         h += '<hr>' + (x.html || '');
         break;
       }
+      case 'evolutions':
+        h += statLine('Cost', esc(x.cost + ' evolution point' + (x.cost > 1 ? 's' : '')));
+        if (x.repeatable) h += statLine('Repeatable', 'yes — can be taken more than once');
+        if (x.forms && x.forms.length) h += statLine('Base form', esc(x.forms.join(' or ')));
+        if (x.minLevel) h += statLine('Minimum summoner level', esc(String(x.minLevel)));
+        if (x.prereqEvos && x.prereqEvos.length) h += statLine('Requires', esc(x.prereqEvos.join(', ') + ' evolution' + (x.prereqEvos.length > 1 ? 's' : '')));
+        h += '<hr>' + (x.html || '');
+        break;
       case 'companionSpecies': {
         const b = x.base || {};
         h += statLine('Size', esc(b.size));

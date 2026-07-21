@@ -22,7 +22,7 @@ const DATA_FILES = [
   'data/archetypes.js', 'data/classabilities.js', 'data/mythicabilities.js',
   'data/mythicpaths.js', 'data/mythicspells.js', 'data/feats.js', 'data/spells.js',
   'data/weapons.js', 'data/armors.js', 'data/items.js', 'data/traits.js',
-  'data/companions.js', 'data/buffs.js', 'data/bundles.js',
+  'data/companions.js', 'data/evolutions.js', 'data/buffs.js', 'data/bundles.js',
 ].map(f => f + '?v=' + DATA_V);
 
 const APP_FILES = [
