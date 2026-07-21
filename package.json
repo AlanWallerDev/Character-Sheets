@@ -1,0 +1,9 @@
+{
+  "name": "pf1e-character-vault",
+  "private": true,
+  "description": "Static Pathfinder 1e character creator/manager. No build step; npm scripts exist only to run tests and gate deploys on them.",
+  "scripts": {
+    "test": "node tests/run-tests.js",
+    "deploy": "npm test && npx wrangler deploy"
+  }
+}

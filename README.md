@@ -165,6 +165,17 @@ where `build_data.py` expects, then run:
 python build_data.py
 ```
 
+After rebuilding data, bump `DATA_VERSION` in `index.html`; after css/js changes, bump
+`APP_VERSION`. The two versions cache-bust independently (and key the service worker's two
+caches), so routine app releases don't re-download the ~17 MB dataset.
+
+## Tests & deploying
+
+`npm test` (or `node tests/run-tests.js`) runs the engine/generator suite against the real
+compiled data. `npm run deploy` runs the tests and only then `wrangler deploy` — in the
+Cloudflare Workers Builds dashboard, set the build/deploy command to `npm run deploy` so a
+red suite blocks the deploy.
+
 ## License & attribution
 
 All game content is Open Game Content under the OGL v1.0a, sourced from the community datasets
