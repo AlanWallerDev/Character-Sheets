@@ -17,6 +17,11 @@ character card to back one up as a JSON file, and **Import JSON** to restore or 
 **💾 Export All** writes a single backup file with every character *and* your homebrew
 database; importing that file merges it back (same character: the newer version wins).
 
+When served over HTTP(S) the app registers a service worker, so after the first visit it
+works fully **offline** and can be installed to a phone/desktop home screen (PWA). The app
+shell and the rules database are cached separately — app updates don't re-download the
+~17 MB dataset.
+
 On narrow screens (phones, small windows) the layout adapts: the side menu starts collapsed to
 free up space and opens as an overlay from the floating **☰** button (closing again when you pick
 something). On wider windows the menu is docked open and can be toggled with **« Hide menu**; that

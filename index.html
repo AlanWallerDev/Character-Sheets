@@ -30,10 +30,16 @@
 <meta name="twitter:title" content="Pathfinder 1e Character Vault">
 <meta name="twitter:description" content="Free Pathfinder 1st Edition character creator & manager — full rules database, play tracker, printable & PDF sheets.">
 
-<!-- One APP_VERSION busts the HTTP cache for the stylesheet and every script
-     at the bottom of the page. Bump it after ANY css/, js/ or data/ change —
-     individual files no longer carry their own ?v= numbers. -->
-<script>var APP_VERSION = 75;
+<meta name="theme-color" content="#1a1612">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+
+<!-- Two cache-busting versions: APP_VERSION covers css/, js/ and vendor/;
+     DATA_VERSION covers the ~17 MB of compiled data/*.js, which rarely changes.
+     Bump APP_VERSION after any css/js change; bump DATA_VERSION only after
+     rebuilding data/ (a routine app release then re-downloads ~100 KB, not the
+     whole dataset). The service worker keys its two caches on the same pair. -->
+<script>var APP_VERSION = 76; var DATA_VERSION = 1;
 document.write('<link rel="stylesheet" href="css/styles.css?v=' + APP_VERSION + '">');</script>
 <noscript><link rel="stylesheet" href="css/styles.css"></noscript>
 </head>
@@ -54,7 +60,7 @@ document.write('<link rel="stylesheet" href="css/styles.css?v=' + APP_VERSION + 
 
 <!-- Compiled PRD data (Paizo OGL content via PSRD-Data), then the app modules.
      document.write keeps the tags parser-blocking, so load order is preserved;
-     every URL gets the single APP_VERSION defined in <head>. -->
+     data/ files get DATA_VERSION, everything else APP_VERSION (see <head>). -->
 <script>
 [
   'data/skills.js', 'data/races.js', 'data/racialtraits.js', 'data/classes.js',
@@ -66,8 +72,18 @@ document.write('<link rel="stylesheet" href="css/styles.css?v=' + APP_VERSION + 
   'js/engine.js', 'js/library.js', 'js/custom.js', 'js/pdf.js', 'js/sheet.js',
   'js/generator.js', 'js/app.js',
 ].forEach(function (src) {
-  document.write('<script src="' + src + '?v=' + APP_VERSION + '"><\/script>');
+  var v = src.indexOf('data/') === 0 ? DATA_VERSION : APP_VERSION;
+  document.write('<script src="' + src + '?v=' + v + '"><\/script>');
 });
+
+// Offline support + installability: the service worker precaches the app and
+// data (two caches, so an app update doesn't re-download the dataset).
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js?app=' + APP_VERSION + '&data=' + DATA_VERSION)
+      .catch(function () { /* offline support is progressive — the app still runs */ });
+  });
+}
 </script>
 </body>
 </html>
