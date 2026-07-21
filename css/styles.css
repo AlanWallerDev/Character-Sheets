@@ -230,6 +230,13 @@ table.data td.num, table.data th.num { text-align: center; }
 }
 #roll-toast.nat20 { border-color: var(--good); }
 #roll-toast.nat1 { border-color: var(--accent2-bright); }
+#undo-toast {
+  position: fixed; bottom: 24px; left: 24px; z-index: 400;
+  background: var(--bg2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 16px; box-shadow: 0 8px 30px var(--shadow);
+  display: none;
+}
 .roll-chip { margin: 2px; border-color: #6d5b41; }
 .roll-chip:hover { background: rgba(201,162,39,.15); }
 .stat-big .v.ok { color: var(--good); }

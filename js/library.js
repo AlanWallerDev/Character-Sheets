@@ -375,11 +375,12 @@ const Library = (() => {
       const listScroll = prevResults ? prevResults.scrollTop : 0;
       const list = applyFilters(state.type, TYPES[state.type].data(), state);
       list.sort((a, b) => a.name.localeCompare(b.name));
+      const limit = state.limit || 400;
       let ordered;
       if (state.type === 'feats' && state.fsort === 'tree') {
-        ordered = treeOrder(list).slice(0, 400);
+        ordered = treeOrder(list).slice(0, limit);
       } else {
-        ordered = list.slice(0, 400).map(x => ({ x, depth: 0 }));
+        ordered = list.slice(0, limit).map(x => ({ x, depth: 0 }));
       }
       const shown = ordered.map(o => o.x);
       const typeSel = opts.fixed ? '' :
@@ -395,7 +396,7 @@ const Library = (() => {
               ${filterControls(state.type, state)}
               ${canCreate ? '<button id="lib-new-custom" class="small" title="Add a homebrew entry to the database">+ Homebrew</button>' : ''}
             </div>
-            <div class="lib-count">${list.length} entries${list.length > 400 ? ' (showing first 400)' : ''}</div>
+            <div class="lib-count">${list.length} entries${list.length > limit ? ` (showing first ${limit})` : ''}</div>
             <div class="lib-results">
               ${ordered.map(({ x, depth }, i) => {
                 let badge = '';
@@ -411,6 +412,7 @@ const Library = (() => {
                   <div class="src">${rowMeta(state.type, x)}</div>
                 </div>`;
               }).join('')}
+              ${list.length > limit ? `<div class="lib-row" id="lib-more" style="text-align:center;color:var(--accent)">Show ${Math.min(400, list.length - limit)} more…</div>` : ''}
             </div>
           </div>
           <div class="lib-detail">
@@ -430,6 +432,7 @@ const Library = (() => {
           } else {
             state[el.dataset.f] = el.value;
           }
+          state.limit = 400;   // a changed filter starts a fresh page
           const qEl = container.querySelector('[data-f=q]');
           state.q = qEl ? qEl.value : state.q;
           const pos = el.selectionStart;
@@ -442,7 +445,10 @@ const Library = (() => {
       });
       const newResults = container.querySelector('.lib-results');
       if (newResults && listScroll) newResults.scrollTop = listScroll;
+      const more = container.querySelector('#lib-more');
+      if (more) more.addEventListener('click', () => { state.limit = (state.limit || 400) + 400; draw(); });
       container.querySelectorAll('.lib-row').forEach(el => {
+        if (el.dataset.i === undefined) return;   // the "Show more" row has its own handler
         el.addEventListener('click', () => {
           selected = shown[parseInt(el.dataset.i, 10)];
           draw();

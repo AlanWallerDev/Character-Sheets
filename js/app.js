@@ -181,7 +181,7 @@
     equipped: !!g.equipped, cost: toStr(g.cost),
     weight: (g.weight == null || g.weight === '') ? null : toNum(g.weight), note: toStr(g.note),
     enh: toInt(g.enh), mw: !!g.mw, special: toStr(g.special), dmgBonus: toStr(g.dmgBonus),
-    consumable: !!g.consumable });
+    consumable: !!g.consumable, stored: !!g.stored });
   const sanRollLine = l => ({ d20: toInt(l.d20), mod: toInt(l.mod), total: toInt(l.total),
     dmg: toStr(l.dmg), bonus: toStr(l.bonus) });
   function sanRoll(r) {
@@ -416,6 +416,23 @@
       }, { title: 'Delete character', danger: true, okLabel: 'Delete' });
     }
 
+    // any tab can link to another builder tab with data-tab-jump="tabname"
+    main.addEventListener('click', e => {
+      const j = e.target.closest('[data-tab-jump]');
+      if (!j) return;
+      e.preventDefault();
+      state.view = 'builder'; state.builderTab = j.dataset.tabJump; render();
+    });
+    // tapping a stat tile that has a breakdown tooltip shows it as a toast —
+    // title attributes never appear on touch screens, where the Play tab lives
+    main.addEventListener('click', e => {
+      const s = e.target.closest('.stat-big[title]');
+      if (!s || s.classList.contains('roller')) return;
+      showRollToast({ pure: true, label: s.querySelector('.l') ? s.querySelector('.l').textContent : 'Stat',
+                      total: s.querySelector('.v') ? s.querySelector('.v').textContent : '',
+                      breakdown: s.title });
+    });
+
     // restore the user's place after an in-place update
     if (detailsState) {
       [...main.querySelectorAll('details')].forEach((d, i) => {
@@ -550,7 +567,7 @@
       e.stopPropagation();
       const src = characters.find(x => x.id === b.dataset.copy);
       const c = JSON.parse(JSON.stringify(src));
-      c.id = 'pc_' + Date.now().toString(36); c.name += ' (copy)';
+      c.id = 'pc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); c.name += ' (copy)';
       characters.push(c); save(); render();
     }));
     grid.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
@@ -916,6 +933,10 @@
     if (!toast) {
       toast = document.createElement('div');
       toast.id = 'roll-toast';
+      // announce roll results to screen readers — the visual toast is the only
+      // feedback when the roll log is off-screen
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
       document.body.appendChild(toast);
     }
     let html, cls = '';
@@ -938,6 +959,42 @@
     toast.style.display = 'block';
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { toast.style.display = 'none'; }, 3500);
+  }
+
+  // ---- undo for destructive row deletes (levels, feats, gear…) ----
+  // Snapshot the whole character before the mutation; the toast's Undo restores
+  // it in place (same object, so open views keep valid references).
+  let undoState = null;
+  function deleteWithUndo(c, label, mutate) {
+    undoState = { charId: c.id, json: JSON.stringify(c), label };
+    mutate();
+    save(); render();
+    showUndoToast(label);
+  }
+  function showUndoToast(label) {
+    let t = document.getElementById('undo-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'undo-toast';
+      t.setAttribute('role', 'status');
+      t.setAttribute('aria-live', 'polite');
+      document.body.appendChild(t);
+    }
+    t.innerHTML = `Removed <b>${esc(label)}</b> <button class="small" id="undo-btn">Undo</button>`;
+    t.style.display = 'block';
+    t.querySelector('#undo-btn').addEventListener('click', () => {
+      if (!undoState) return;
+      const cur = characters.find(x => x.id === undoState.charId);
+      if (cur) {
+        Object.assign(cur, patch(JSON.parse(undoState.json)));
+        cur.updated = Date.now();   // must beat the delete's save in the two-tab merge
+      }
+      undoState = null;
+      t.style.display = 'none';
+      save(); render();
+    });
+    clearTimeout(t._t);
+    t._t = setTimeout(() => { t.style.display = 'none'; undoState = null; }, 6000);
   }
 
   function rollChip(label, mod, extra, bonusDice) {
@@ -1845,9 +1902,8 @@
             <option value="roll" ${c.abilityMethod === 'roll' ? 'selected' : ''}>Roll (4d6 drop lowest)</option>
             <option value="manual" ${c.abilityMethod === 'manual' ? 'selected' : ''}>Manual</option>
           </select>`)}
-          ${c.abilityMethod === 'pointbuy' ? field('Budget', `<select id="ab-budget">
-            ${[10, 15, 20, 25].map(b => `<option ${c.pointBuyBudget === b ? 'selected' : ''}>${b}</option>`).join('')}
-          </select>`) : ''}
+          ${c.abilityMethod === 'pointbuy' ? field('Budget', `<input class="tiny" id="ab-budget" type="number" min="0" max="99"
+            value="${c.pointBuyBudget}" title="10 low fantasy / 15 standard / 20 high fantasy / 25 epic — or any house value">`) : ''}
           ${c.abilityMethod === 'pointbuy' ? `<div style="margin-top:14px">Spent:
             <b class="${pb > c.pointBuyBudget ? 'err' : 'ok'}">${pb}</b> / ${c.pointBuyBudget}</div>` : ''}
           ${c.abilityMethod === 'roll' ? `<button id="ab-roll" style="margin-top:14px">🎲 Roll All</button>` : ''}
@@ -1864,6 +1920,8 @@
           }).join('')}
         </div>
         <p class="small muted">Total = base + racial + level increases (+1 every 4 levels) + misc (belts, tomes, etc.).</p>
+        ${(() => { const r = PF.getRace(c.race); return r && r.flex
+          ? `<p class="small warn">Your race's flexible +${r.flex} is currently on <b>${PF.ABILITY_NAMES[c.flexChoice] || 'Strength'}</b> — change it on the <a href="#" data-tab-jump="race">Race tab</a>.</p>` : ''; })()}
         <div class="grid2">
           <div><h4>Level increases (+1 each at levels 4, 8, 12, 16, 20 — you have ${Math.floor(c.levels.length / 4)})</h4>
             <div class="stat-mini-row">
@@ -1882,7 +1940,7 @@
         </div>
       </div>`;
     bind('ab-method', c, v => { c.abilityMethod = v; render(); });
-    if ($('#ab-budget')) bind('ab-budget', c, v => { c.pointBuyBudget = parseInt(v, 10); render(); });
+    if ($('#ab-budget')) bind('ab-budget', c, v => { c.pointBuyBudget = Math.max(0, parseInt(v, 10) || 0); render(); });
     if ($('#ab-roll')) $('#ab-roll').addEventListener('click', () => {
       for (const ab of PF.ABILITIES) {
         const dice = [0, 0, 0, 0].map(() => 1 + Math.floor(Math.random() * 6)).sort((a, b) => b - a);
@@ -1903,11 +1961,14 @@
     const race = PF.getRace(c.race);
     const groups = {};
     for (const r of PFDATA.races) (groups[r.subtype || 'other'] = groups[r.subtype || 'other'] || []).push(r);
+    // core races first — a new player shouldn't scroll past 30 exotic races to find Human
+    const GROUP_ORDER = ['core race', 'featured race', 'uncommon race', 'other race', 'monster race'];
+    const groupRank = g => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? GROUP_ORDER.length : i; };
     main.innerHTML = `<h2>Race</h2>${statBar(c)}
       <div class="row">
         <div class="panel" style="max-width:380px">
           ${field('Race', `<select id="race-sel"><option value="">— choose —</option>
-            ${Object.entries(groups).map(([g, rs]) => `<optgroup label="${esc(g)}">${rs.map(r =>
+            ${Object.entries(groups).sort((a, b) => groupRank(a[0]) - groupRank(b[0])).map(([g, rs]) => `<optgroup label="${esc(g)}">${rs.map(r =>
               `<option ${c.race === r.name ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</optgroup>`).join('')}
           </select>`)}
           ${race && race.flex ? field(`Flexible bonus (+${race.flex} to one ability)`,
@@ -1939,8 +2000,9 @@
       }, { race: c.race }));
     main.querySelectorAll('[data-deltrait]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
-      c.altTraits = c.altTraits.filter(x => x !== a.dataset.deltrait);
-      save(); render();
+      deleteWithUndo(c, a.dataset.deltrait, () => {
+        c.altTraits = c.altTraits.filter(x => x !== a.dataset.deltrait);
+      });
     }));
     attachRefPopovers(main, c);
   }
@@ -2004,7 +2066,8 @@
     bind('hp-mode', c, v => { c.hpMode = v; render(); });
     bind('fav-cls', c, v => c.favoredClass = v);
     main.querySelectorAll('[data-dellvl]').forEach(b => b.addEventListener('click', () => {
-      c.levels.splice(parseInt(b.dataset.dellvl, 10), 1); save(); render();
+      const i = parseInt(b.dataset.dellvl, 10);
+      deleteWithUndo(c, `Level ${i + 1} (${c.levels[i].cls})`, () => c.levels.splice(i, 1));
     }));
     main.querySelectorAll('[data-hp]').forEach(el => el.addEventListener('change', () => {
       c.levels[parseInt(el.dataset.hp, 10)].hp = parseInt(el.value, 10) || null; save(); render();
@@ -2022,8 +2085,9 @@
     main.querySelectorAll('[data-delarch]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
       const cls = a.dataset.archCls;
-      setClassArchetypes(c, cls, classArchetypes(c, cls).filter(x => x !== a.dataset.delarch));
-      save(); render();
+      deleteWithUndo(c, a.dataset.delarch, () => {
+        setClassArchetypes(c, cls, classArchetypes(c, cls).filter(x => x !== a.dataset.delarch));
+      });
     }));
     main.querySelectorAll('[data-addability]').forEach(b => b.addEventListener('click', () => {
       const cls = b.dataset.addability;
@@ -2038,8 +2102,9 @@
     main.querySelectorAll('[data-delability]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
       const cls = a.dataset.abilityCls, name = a.dataset.delability;
-      c.classAbilities = (c.classAbilities || []).filter(x => !(x.name === name && x.cls === cls));
-      save(); render();
+      deleteWithUndo(c, name, () => {
+        c.classAbilities = (c.classAbilities || []).filter(x => !(x.name === name && x.cls === cls));
+      });
     }));
     attachRefPopovers(main, c);
   }
@@ -2138,7 +2203,7 @@
     main.innerHTML = `<h2>Skills</h2>${statBar(c)}
       <div class="panel">
         <p>Skill points: <b class="${spent > budget ? 'err' : 'ok'}">${spent}</b> / ${budget} spent
-          <span class="muted small">(class ranks + Int${PF.getRace(c.race) && c.race === 'Human' ? ' + human bonus' : ''} + favored class)</span>
+          <span class="muted small">(class ranks + Int${(() => { const rt = PF.racialTraits(c); return rt && rt.standard.some(t => !t.replaced && /Skilled/i.test(t.name) && /skill rank/i.test(t.body)) ? ' + racial bonus rank' : ''; })()} + favored class)</span>
           • Max ranks per skill: <b>${maxRanks}</b>
           • Armor check penalty: <b>${PF.armorCheckPenalty(c)}</b>
           <button class="small" id="add-custom-skill" style="float:right">+ Custom skill</button>
@@ -2252,10 +2317,12 @@
     $('#add-trait').addEventListener('click', () =>
       Library.pickModal('traits', 'Add Trait', t => { c.traits.push(t.name); save(); render(); }));
     main.querySelectorAll('[data-delfeat]').forEach(b => b.addEventListener('click', () => {
-      c.feats.splice(parseInt(b.dataset.delfeat, 10), 1); save(); render();
+      const i = parseInt(b.dataset.delfeat, 10);
+      deleteWithUndo(c, c.feats[i].name, () => c.feats.splice(i, 1));
     }));
     main.querySelectorAll('[data-deltr]').forEach(b => b.addEventListener('click', () => {
-      c.traits.splice(parseInt(b.dataset.deltr, 10), 1); save(); render();
+      const i = parseInt(b.dataset.deltr, 10);
+      deleteWithUndo(c, c.traits[i], () => c.traits.splice(i, 1));
     }));
     main.querySelectorAll('[data-fnote]').forEach(el => el.addEventListener('change', () => {
       c.feats[parseInt(el.dataset.fnote, 10)].note = el.value; save();
@@ -2393,7 +2460,8 @@
       }, { cls: info.list });
     }));
     main.querySelectorAll('[data-delspell]').forEach(b => b.addEventListener('click', () => {
-      c.spells.splice(parseInt(b.dataset.delspell, 10), 1); save(); render();
+      const i = parseInt(b.dataset.delspell, 10);
+      deleteWithUndo(c, c.spells[i].name, () => c.spells.splice(i, 1));
     }));
     main.querySelectorAll('[data-prep]').forEach(el => el.addEventListener('change', () => {
       c.spells[parseInt(el.dataset.prep, 10)].prepared = parseInt(el.value, 10) || 0; save();
@@ -2456,6 +2524,8 @@
             <td><b>${esc(PF.gearDisplayName(g))}</b>
               ${PF.gearIsAmmo(g) ? '' : `<label class="small muted" style="white-space:nowrap;margin-left:6px"
                 title="show as a one-tap quantity tracker on the Play tab"><input type="checkbox" data-gcons="${i}" ${g.consumable ? 'checked' : ''}> consumable</label>`}
+              <label class="small muted" style="white-space:nowrap;margin-left:6px"
+                title="kept at camp, on a mount or in a wagon — owned but not carried, so it doesn't count toward encumbrance"><input type="checkbox" data-gstored="${i}" ${g.stored ? 'checked' : ''}> stored</label>
               ${enchantable ? `<details class="small"><summary style="cursor:pointer;color:var(--accent)">✨ enchantment</summary>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:3px">
                   <label>+ <input class="tiny" type="number" min="0" max="10" data-genh="${i}" value="${g.enh || 0}" title="enhancement bonus"></label>
@@ -2492,7 +2562,7 @@
     const addGear = (entry, kind) => {
       c.gear.push({
         name: entry.name, kind,
-        qty: 1, equipped: kind === 'armor',
+        qty: 1, equipped: kind === 'armor' || kind === 'weapon',
         weight: parseFloat(String(entry.weight || '').replace(/[^\d.]/g, '')) || 0,
         cost: entry.cost || entry.price || '', note: '',
         consumable: kind === 'item' && CONSUMABLE_RE.test(entry.name || ''),
@@ -2513,7 +2583,8 @@
     bind('carry-str', c, v => { c.combat.carryStrBonus = parseInt(v, 10) || 0; render(); });
     bind('carry-mult', c, v => { c.combat.carryMult = Math.max(1, parseFloat(v) || 1); render(); });
     main.querySelectorAll('[data-delgear]').forEach(b => b.addEventListener('click', () => {
-      c.gear.splice(parseInt(b.dataset.delgear, 10), 1); save(); render();
+      const i = parseInt(b.dataset.delgear, 10);
+      deleteWithUndo(c, PF.gearDisplayName(c.gear[i]), () => c.gear.splice(i, 1));
     }));
     main.querySelectorAll('[data-qty]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.qty, 10)].qty = parseInt(el.value, 10) || 1; save(); render();
@@ -2551,6 +2622,9 @@
     }));
     main.querySelectorAll('[data-gdmg]').forEach(el => el.addEventListener('change', () => {
       c.gear[parseInt(el.dataset.gdmg, 10)].dmgBonus = el.value; save(); render();
+    }));
+    main.querySelectorAll('[data-gstored]').forEach(el => el.addEventListener('change', () => {
+      c.gear[parseInt(el.dataset.gstored, 10)].stored = el.checked; save(); render();
     }));
   }
 
@@ -2662,7 +2736,9 @@
       } else open(null);
     }));
     main.querySelectorAll('[data-delcomp]').forEach(b => b.addEventListener('click', () => {
-      c.companions.splice(parseInt(b.dataset.delcomp, 10), 1); save(); render();
+      const i = parseInt(b.dataset.delcomp, 10);
+      const comp = c.companions[i];
+      deleteWithUndo(c, comp.name || comp.type, () => c.companions.splice(i, 1));
     }));
     main.querySelectorAll('[data-cname]').forEach(el => el.addEventListener('change', () => {
       c.companions[+el.dataset.cname].name = el.value; save();
@@ -2760,11 +2836,10 @@
       }, { mpath: m.path }));
     main.querySelectorAll('[data-delmyth]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
-      c.mythic.abilities = c.mythic.abilities.filter(x => x !== a.dataset.delmyth);
-      save(); render();
+      deleteWithUndo(c, a.dataset.delmyth, () => {
+        c.mythic.abilities = c.mythic.abilities.filter(x => x !== a.dataset.delmyth);
+      });
     }));
-    const jump = main.querySelector('[data-tab-jump]');
-    if (jump) jump.addEventListener('click', e => { e.preventDefault(); state.builderTab = jump.dataset.tabJump; render(); });
     attachRefPopovers(main, c);
   }
 

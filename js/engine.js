@@ -755,6 +755,7 @@ const PF = (() => {
   function gearWeight(c) {
     let w = 0;
     for (const g of c.gear) {
+      if (g.stored) continue;   // owned but not carried (camp, mount, wagon)
       let item = parseFloat(g.weight);
       if (isNaN(item)) {
         const src = getWeapon(g.name) || getArmor(g.name) || getItem(g.name);

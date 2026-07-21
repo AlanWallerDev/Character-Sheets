@@ -438,6 +438,17 @@ for (let i = 0; i < 2; i++) brawler.levels.push({ cls: 'Brawler', archetypes: []
 const brt = PF.totals(brawler);
 check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
 
+// ---------------- stored gear is excluded from encumbrance ----------------
+{
+  const sg = PF.newCharacter('Packrat');
+  sg.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+  sg.gear.push({ name: 'Heavy crate', kind: 'custom', qty: 1, weight: 100 });
+  const carried = PF.gearWeight(sg);
+  sg.gear[0].stored = true;
+  check('stored gear does not count toward carried weight', PF.gearWeight(sg) === carried - 100,
+    { carried, stored: PF.gearWeight(sg) });
+}
+
 // ---------------- result ----------------
 console.log('%d passed, %d failed', passed, failed);
 process.exit(failed ? 1 : 0);
