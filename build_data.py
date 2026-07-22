@@ -1136,11 +1136,14 @@ def parse_evolution(name, cost, body, source_name):
     m = re.search(r'available to eidolons of the ([a-z]+)(?:\s+(?:and|or)\s+([a-z]+))? base forms?', t)
     if m:
         forms = [_FORM_WORDS[g] for g in m.groups() if g in _FORM_WORDS]
-    # repeatable if the text says so directly ("more than once") or gates repeats
-    # on level ("can be taken once for every five levels"). The "taken/selected"
-    # anchor avoids matching passive scaling ("resistance increases … for every").
-    repeatable = 'more than once' in t or bool(
-        re.search(r'(?:taken|selected|applied)\b[^.]*\bfor every\b', t))
+    # repeatable if the text says so directly ("can be selected more than once")
+    # or gates repeats on level ("can be taken once for every five levels").
+    # Both patterns anchor on the selection verb: Poison's "can be used no more
+    # than once per round" and passive scaling ("resistance increases … for
+    # every") must NOT count as repeatable.
+    repeatable = bool(
+        re.search(r'(?:taken|selected|applied|chosen)\s+more than once', t) or
+        re.search(r'(?:taken|selected|applied|chosen)\b[^.]*\bfor every\b', t))
     return {
         'name': name,
         'cost': cost,

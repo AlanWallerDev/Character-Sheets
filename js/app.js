@@ -230,9 +230,10 @@
     : { label: toStr(ca.label), count: toInt(ca.count, 1), atkAbility: toStr(ca.atkAbility), type: toStr(ca.type),
         dice: toStr(ca.dice), dmgMult: toStr(ca.dmgMult), atkBonus: toInt(ca.atkBonus), dmgBonus: toInt(ca.dmgBonus),
         bonusDice: toStr(ca.bonusDice) };
-  // Evolutions are stored one entry per selection: {name, choice}. Legacy data
-  // used a `ranks` count with a single shared choice — expand each into `ranks`
-  // separate selections so a repeated evolution can carry distinct choices.
+  // Evolutions are stored one entry per selection: {name, choice, addons?}.
+  // `addons` counts purchased upgrades by id ({use: 2} = two extra breath-weapon
+  // uses). Legacy data used a `ranks` count with a single shared choice — expand
+  // each into `ranks` separate selections so repeats can carry distinct choices.
   function sanEvolutions(arr) {
     const out = [];
     if (!Array.isArray(arr)) return out;
@@ -241,8 +242,19 @@
       const name = toStr(e.name);
       if (!name) continue;
       const choice = toStr(e.choice);
+      let addons = null;
+      if (e.addons && typeof e.addons === 'object' && !Array.isArray(e.addons)) {
+        for (const [k, v] of Object.entries(e.addons)) {
+          const n = toInt(v);
+          if (n > 0) (addons = addons || {})[word(k)] = n;
+        }
+      }
       const n = Math.max(1, toInt(e.ranks, 1));   // legacy ranks → repeated entries
-      for (let k = 0; k < n; k++) out.push({ name, choice });
+      for (let k = 0; k < n; k++) {
+        const entry = { name, choice };
+        if (addons) entry.addons = Object.assign({}, addons);
+        out.push(entry);
+      }
     }
     return out;
   }
@@ -2793,24 +2805,34 @@
   // are grouped into a single pill with a count/stepper — so a repeated
   // evolution can carry DIFFERENT choices in separate pills (Limbs arms + Limbs
   // legs, Flight speed + Flight maneuverability, Resistance fire + cold…).
+  // canonical key for one selection's purchased add-ons (order-independent)
+  function evoAddonKey(ev) {
+    const a = ev.addons || {};
+    return JSON.stringify(Object.keys(a).filter(k => a[k] > 0).sort().map(k => [k, a[k]]));
+  }
+
   function eidolonEvoPanel(c, comp, i) {
     const pool = PF.evolutionPool(c, comp);
     const meterCls = pool.over ? 'err' : 'ok';
     const d = PF.companionDerived(c, comp);
     const atkOver = d.maxAttacks && d.attackCount > d.maxAttacks;
+    const lvl = PF.companionEffLevel(c, comp);
+    // group identical selections: same name + choice + purchased add-ons
     const groups = [], byKey = new Map();
     (comp.evolutions || []).forEach(ev => {
-      const key = ev.name + ' ' + (ev.choice || '');
+      const key = ev.name + '|' + (ev.choice || '') + '|' + evoAddonKey(ev);
       let g = byKey.get(key);
-      if (!g) { g = { name: ev.name, choice: ev.choice || '', count: 0 }; byKey.set(key, g); groups.push(g); }
+      if (!g) { g = { name: ev.name, choice: ev.choice || '', addons: ev.addons || {}, adKey: evoAddonKey(ev), count: 0, sample: ev }; byKey.set(key, g); groups.push(g); }
       g.count++;
     });
     const pills = groups.map(g => {
       const e = PF.getEvolution(g.name);
-      const cost = e ? e.cost : '?';
+      const cost = e ? PF.evolutionEntryCost(comp, g.sample) : '?';
       const spec = PF.evolutionChoiceSpec(g.name);
+      const addonSpecs = PF.evolutionAddons(g.name);
       const pre = e ? PF.evolutionPrereqs(c, comp, e) : { ok: true, reasons: [] };
-      const dn = `data-evoname="${esc(g.name)}" data-evoch="${esc(g.choice)}"`;
+      const dupBad = e && !e.repeatable && g.count > 1;
+      const dn = `data-evoname="${esc(g.name)}" data-evoch="${esc(g.choice)}" data-evoad="${esc(g.adKey)}"`;
       let choiceHtml = '';
       if (spec && spec.kind === 'select') {
         choiceHtml = `<select data-evochoice="${i}" ${dn} style="padding:1px 3px">
@@ -2819,13 +2841,26 @@
       } else if (spec && spec.kind === 'text') {
         choiceHtml = `<input data-evochoice="${i}" ${dn} value="${esc(g.choice)}" placeholder="${esc(spec.placeholder || '')}" style="width:96px;padding:1px 4px">`;
       }
-      const stepper = (e && e.repeatable)
+      // upgrade purchases: checkbox for one-shot add-ons, stepper for stacking ones
+      const addonHtml = (addonSpecs || []).map(a => {
+        const n = Math.max(0, (g.addons || {})[a.id] || 0);
+        const gated = (a.minLevel && lvl < a.minLevel) || (a.needs && !((g.addons || {})[a.needs] > 0));
+        const gateWhy = a.minLevel && lvl < a.minLevel ? 'summoner level ' + a.minLevel + '+' : 'buy the prerequisite upgrade first';
+        const lbl = `${esc(a.label)} <span class="muted">+${a.cost}pt${a.max === 1 ? '' : ' ea'}</span>${gated && n > 0 ? ` <span class="warn" title="${esc(gateWhy)}">⚠</span>` : ''}`;
+        if (a.max === 1) {
+          return `<label class="small" style="white-space:nowrap" title="${esc(gated ? gateWhy : 'upgrade: ' + a.label)}"><input type="checkbox" data-evoaddon="${i}:${a.id}" ${dn} ${n > 0 ? 'checked' : ''}> ${lbl}</label>`;
+        }
+        return `<span class="small" style="white-space:nowrap" title="${esc(gated ? gateWhy : 'upgrade: ' + a.label)}">${lbl}
+          <button class="small" data-evoaddonstep="${i}:${a.id}:-1" ${dn}>−</button><b>${n}</b><button class="small" data-evoaddonstep="${i}:${a.id}:1" ${dn}>＋</button></span>`;
+      }).join(' ');
+      const stepper = (e && (e.repeatable || g.count > 1))
         ? `<button class="small" data-evostep="${i}:-1" ${dn} title="one fewer">−</button><b title="selections">${g.count}</b><button class="small" data-evostep="${i}:1" ${dn} title="one more">＋</button>`
         : '';
-      return `<span class="pill ${pre.ok ? 'gold' : 'pill-unmet'}" style="white-space:nowrap">
+      return `<span class="pill ${pre.ok && !dupBad ? 'gold' : 'pill-unmet'}" style="white-space:nowrap">
         <span class="ref" data-rt="evolution" data-rn="${esc(g.name)}">${esc(g.name)}</span>
-        <span class="muted">(${cost}pt${g.count > 1 ? ' ×' + g.count : ''})</span>
-        ${choiceHtml} ${stepper}
+        <span class="muted" title="points per selection incl. upgrades">(${cost}pt${g.count > 1 ? ' ×' + g.count : ''})</span>
+        ${choiceHtml} ${stepper} ${addonHtml}
+        ${dupBad ? `<span class="err" title="this evolution can only be taken once — its effect is applied once">⚠ ×${g.count}</span>` : ''}
         ${pre.ok ? '' : `<span class="err" title="${esc('Prereq: ' + pre.reasons.join('; '))}">⚠</span>`}
         <a href="#" data-evodel="${i}" ${dn} style="text-decoration:none">✕</a></span>`;
     }).join(' ');
@@ -3050,29 +3085,57 @@
         save(); render();
       });
     }));
-    // evolution pills are grouped by (name + choice); handlers match on that pair
+    // evolution pills are grouped by (name + choice + purchased add-ons);
+    // handlers match entries on that triple
+    const evoMatch = (el, ev) => ev.name === el.dataset.evoname &&
+      (ev.choice || '') === el.dataset.evoch && evoAddonKey(ev) === el.dataset.evoad;
     main.querySelectorAll('[data-evodel]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
       const comp = c.companions[+a.dataset.evodel];
-      comp.evolutions = (comp.evolutions || []).filter(ev => !(ev.name === a.dataset.evoname && (ev.choice || '') === a.dataset.evoch));
+      comp.evolutions = (comp.evolutions || []).filter(ev => !evoMatch(a, ev));
       save(); render();
     }));
     main.querySelectorAll('[data-evostep]').forEach(b => b.addEventListener('click', () => {
       const [i, d] = b.dataset.evostep.split(':');
       const comp = c.companions[+i];
-      const name = b.dataset.evoname, ch = b.dataset.evoch;
       if (parseInt(d, 10) > 0) {
-        comp.evolutions.push({ name, choice: ch });
+        const like = comp.evolutions.find(ev => evoMatch(b, ev));
+        const entry = { name: b.dataset.evoname, choice: b.dataset.evoch };
+        if (like && like.addons) entry.addons = Object.assign({}, like.addons);
+        comp.evolutions.push(entry);
       } else {
-        const last = comp.evolutions.map((ev, k) => ({ ev, k })).filter(x => x.ev.name === name && (x.ev.choice || '') === ch).pop();
+        const last = comp.evolutions.map((ev, k) => ({ ev, k })).filter(x => evoMatch(b, x.ev)).pop();
         if (last) comp.evolutions.splice(last.k, 1);
       }
       save(); render();
     }));
     main.querySelectorAll('[data-evochoice]').forEach(el => el.addEventListener('change', () => {
       const comp = c.companions[+el.dataset.evochoice];
-      const name = el.dataset.evoname, old = el.dataset.evoch;
-      for (const ev of comp.evolutions) if (ev.name === name && (ev.choice || '') === old) ev.choice = el.value;
+      for (const ev of comp.evolutions) if (evoMatch(el, ev)) ev.choice = el.value;
+      save(); render();
+    }));
+    // add-on upgrades: checkbox toggles a one-shot upgrade, stepper counts a stacking one
+    main.querySelectorAll('[data-evoaddon]').forEach(el => el.addEventListener('change', () => {
+      const [i, id] = el.dataset.evoaddon.split(':');
+      const comp = c.companions[+i];
+      for (const ev of comp.evolutions) {
+        if (!evoMatch(el, ev)) continue;
+        if (!ev.addons) ev.addons = {};
+        if (el.checked) ev.addons[id] = 1; else delete ev.addons[id];
+      }
+      save(); render();
+    }));
+    main.querySelectorAll('[data-evoaddonstep]').forEach(b => b.addEventListener('click', () => {
+      const [i, id, d] = b.dataset.evoaddonstep.split(':');
+      const comp = c.companions[+i];
+      const spec = (PF.evolutionAddons(b.dataset.evoname) || []).find(a => a.id === id);
+      for (const ev of comp.evolutions) {
+        if (!evoMatch(b, ev)) continue;
+        if (!ev.addons) ev.addons = {};
+        let n = Math.max(0, (ev.addons[id] || 0) + parseInt(d, 10));
+        if (spec && spec.max != null) n = Math.min(n, spec.max);
+        if (n > 0) ev.addons[id] = n; else delete ev.addons[id];
+      }
       save(); render();
     }));
     attachRefPopovers(main, c);

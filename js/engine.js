@@ -973,11 +973,11 @@ const PF = (() => {
   const EVO_CHOICES = {
     'ability increase': { kind: 'select', options: ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha'] },
     'limbs':            { kind: 'select', options: ['arms', 'legs'] },
-    'flight':           { kind: 'select', options: ['fly speed +20 ft', 'maneuverability +1 step'] },
     'resistance':       { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
     'immunity':         { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
     'energy attacks':   { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
-    'breath weapon':    { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
+    'breath weapon':    { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire'] },
+    'poison':           { kind: 'select', options: ['bite', 'sting'] },
     'skilled':          { kind: 'text', placeholder: 'skill' },
     'reach':            { kind: 'text', placeholder: 'which attack' },
     'damage reduction': { kind: 'text', placeholder: 'e.g. magic, cold iron' },
@@ -988,6 +988,60 @@ const PF = (() => {
     'ultimate magic':   { kind: 'text', placeholder: 'spell' },
   };
   const evolutionChoiceSpec = name => EVO_CHOICES[String(name || '').toLowerCase()] || null;
+
+  // Add-on upgrades purchased with EXTRA evolution points on top of the base
+  // cost — a different mechanic from taking the evolution again (and usually a
+  // different price). Parsed from the published rules text of each evolution:
+  //   { id, label, cost (points each), max (times purchasable; null = no cap),
+  //     minLevel?, needs? (another addon id that must be bought first) }
+  const EVO_ADDONS = {
+    'breath weapon': [
+      { id: 'use', label: '+1 use/day', cost: 1, max: 2 }],                       // to 3/day max
+    'basic magic': [
+      { id: '3day', label: 'cast 3/day', cost: 2, max: 1, minLevel: 4 }],
+    'minor magic': [
+      { id: '3day', label: 'cast 3/day', cost: 2, max: 1, minLevel: 7 }],
+    'major magic': [
+      { id: '3day', label: 'cast 3/day', cost: 2, max: 1, minLevel: 10 }],
+    'channel resistance': [
+      { id: 'plus4', label: '+4 bonus', cost: 2, max: 1, minLevel: 7 }],
+    'flight': [
+      { id: 'magic', label: 'magic flight (perfect)', cost: 2, max: 1 },
+      { id: 'speed', label: '+20 ft fly speed', cost: 1, max: null }],
+    'poison': [
+      { id: 'con', label: 'Con damage instead of Str', cost: 2, max: 1 }],
+    'undead appearance': [
+      { id: 'plus4', label: '+4 saves', cost: 2, max: 1, minLevel: 7 },
+      { id: 'immunity', label: 'immunity', cost: 2, max: 1, minLevel: 12, needs: 'plus4' }],
+    'weapon training': [
+      { id: 'martial', label: 'martial weapons', cost: 2, max: 1 }],
+    'damage reduction': [
+      { id: 'dr10', label: 'DR 10', cost: 2, max: 1, minLevel: 12 }],
+    'fast healing': [
+      { id: 'heal', label: '+1 healing/round', cost: 2, max: 4 }],               // to fast healing 5
+    'large': [
+      { id: 'huge', label: 'Huge', cost: 6, max: 1, minLevel: 13 }],
+  };
+  const evolutionAddons = name => EVO_ADDONS[String(name || '').toLowerCase()] || null;
+
+  // Points one selection entry costs: base + its purchased add-ons. Ability
+  // Increase on Strength or Constitution costs DOUBLE while the eidolon is
+  // Large/Huge (printed in the Large evolution's rules).
+  function evolutionEntryCost(comp, ev) {
+    const e = getEvolution(ev.name);
+    if (!e) return 0;
+    let cost = e.cost;
+    if (e.name.toLowerCase() === 'ability increase' &&
+        /^(str|con)/i.test(String(ev.choice || '')) &&
+        (comp.evolutions || []).some(x => String(x.name).toLowerCase() === 'large')) {
+      cost *= 2;
+    }
+    const specs = evolutionAddons(ev.name);
+    if (specs && ev.addons) {
+      for (const a of specs) cost += a.cost * Math.max(0, (ev.addons[a.id] || 0));
+    }
+    return cost;
+  }
 
   // Natural-attack evolutions the app can add to the eidolon's attack line.
   // [Medium, Large, Huge damage dice, number of attacks per rank, secondary?]
@@ -1012,8 +1066,7 @@ const PF = (() => {
     const max = row ? intIn(row['Evolution Pool']) : 0;
     let spent = 0;
     for (const ev of (comp.evolutions || [])) {
-      const e = getEvolution(ev.name);
-      if (e) spent += e.cost;   // one entry per selection
+      spent += evolutionEntryCost(comp, ev);   // base + add-ons, one entry per selection
     }
     return { max, spent, remaining: max - spent, over: spent > max };
   }
@@ -1064,14 +1117,31 @@ const PF = (() => {
   // evolutions. Only the cleanly quantifiable ones fold into the stat block;
   // everything else is surfaced as a note (with its rules text still available
   // in the picker / hover popover). -> { abil{}, natArmor, size|null, attacks:[{key,ranks}], notes:[] }
+  // Human-readable suffix for an entry's purchased add-ons ("+2 uses/day")
+  function addonNoteText(ev) {
+    const specs = evolutionAddons(ev.name);
+    if (!specs || !ev.addons) return '';
+    const bits = [];
+    for (const a of specs) {
+      const n = Math.max(0, ev.addons[a.id] || 0);
+      if (n > 0) bits.push(a.label + (a.max === 1 || n === 1 ? '' : ' ×' + n));
+    }
+    return bits.join(', ');
+  }
+
   function eidolonEvolutionEffects(comp) {
     const eff = { abil: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, natArmor: 0, size: null, attacks: [], notes: [] };
-    let large = 0;
-    const atkCount = {}, noteSeen = new Set();
+    const atkCount = {}, noteSeen = new Set(), onceSeen = new Set();
     for (const ev of (comp.evolutions || [])) {   // each entry is one selection
       const e = getEvolution(ev.name);
       if (!e) continue;
       const key = e.name.toLowerCase();
+      // a non-repeatable evolution taken twice is an illegal duplicate — the UI
+      // flags it; apply its mechanical effect only once
+      if (!e.repeatable) {
+        if (onceSeen.has(key)) continue;
+        onceSeen.add(key);
+      }
       if (key === 'ability increase') {
         const ab = String(ev.choice || '').toLowerCase().slice(0, 3);
         if (ABILITIES.includes(ab)) eff.abil[ab] += 2;
@@ -1079,16 +1149,23 @@ const PF = (() => {
       } else if (key === 'improved natural armor') {
         eff.natArmor += 2;
       } else if (key === 'large') {
-        large += 1;
-        eff.abil.str += 8; eff.abil.con += 4; eff.abil.dex -= 2; eff.natArmor += 2;
+        // Huge is the +6-point add-on on Large; its bonuses REPLACE Large's
+        if (ev.addons && ev.addons.huge > 0) {
+          eff.size = 'Huge';
+          eff.abil.str += 16; eff.abil.con += 8; eff.abil.dex -= 4; eff.natArmor += 5;
+        } else {
+          eff.size = 'Large';
+          eff.abil.str += 8; eff.abil.con += 4; eff.abil.dex -= 2; eff.natArmor += 2;
+        }
       } else if (EVO_ATTACKS[key]) {
         atkCount[key] = (atkCount[key] || 0) + 1;
       } else {
-        const label = e.name + (ev.choice ? ' (' + ev.choice + ')' : '');
+        const extra = addonNoteText(ev);
+        const detail = [ev.choice, extra].filter(Boolean).join('; ');
+        const label = e.name + (detail ? ' (' + detail + ')' : '');
         if (!noteSeen.has(label)) { noteSeen.add(label); eff.notes.push(label); }
       }
     }
-    if (large >= 2) eff.size = 'Huge'; else if (large === 1) eff.size = 'Large';
     eff.attacks = Object.entries(atkCount).map(([key, sel]) => ({ key, sel }));
     return eff;
   }
@@ -1923,7 +2000,8 @@ const PF = (() => {
     getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
     getCompSpecies, getFamiliarSpecies,
-    getEvolution, evolutionChoiceSpec, evolutionPool, evolutionPrereqs, eidolonEvolutionEffects,
+    getEvolution, evolutionChoiceSpec, evolutionAddons, evolutionEntryCost,
+    evolutionPool, evolutionPrereqs, eidolonEvolutionEffects,
     CONDITIONS, newPlayState, hasPlayPenalties, stackTotal, effective, currentHP, rollDice,
     buffLibrary, invalidateCaches, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
     featPrereqs, checkFeatPrereqs, featParents, casterLevelOf, maxSpellLevel,

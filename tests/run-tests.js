@@ -461,8 +461,9 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
     { name: 'Large', choice: '' },                   // 4pt
   ];
   const pool = PF.evolutionPool(ev, eid);
-  check('pool spent = 1+1+2+1+4 = 9', pool.spent === 9, pool.spent);
-  check('pool not over budget at 9/11', pool.over === false, pool);
+  // Ability Increase (Str) costs double (4) because Large is in the build
+  check('pool spent = 1+1+4+1+4 = 11 (Str increase doubled while Large)', pool.spent === 11, pool.spent);
+  check('pool exactly at budget 11/11 is not over', pool.over === false, pool);
 
   const eff = PF.eidolonEvolutionEffects(eid);
   check('Improved Natural Armor ×2 → +4 natural armor (before Large)',
@@ -502,7 +503,8 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
   const ms = PF.newCharacter('Multi-Select'); for (let i = 0; i < 10; i++) ms.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
   const me = PF.newCompanion('eidolon'); me.form = 'Quadruped'; ms.companions = [me];
   check('Limbs has an arms/legs choice spec', PF.evolutionChoiceSpec('Limbs').options.join() === 'arms,legs');
-  check('Flight has a speed/maneuverability choice spec', PF.evolutionChoiceSpec('Flight').kind === 'select');
+  check('Flight upgrades are add-ons: magic flight + stackable fly speed',
+    (PF.evolutionAddons('Flight') || []).map(a => a.id).join() === 'magic,speed');
   me.evolutions = [
     { name: 'Ability Increase', choice: 'str' },
     { name: 'Ability Increase', choice: 'dex' },   // second selection, different ability
@@ -516,6 +518,38 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
     PF.evolutionPool(ms, me).spent === 2 + 2 + 2 + 2, PF.evolutionPool(ms, me).spent);
   check('distinct-choice selections surface as separate notes',
     meff.notes.filter(n => /^Limbs/.test(n)).length === 2, meff.notes);
+
+  // ---- add-on upgrades (extra points on top of the base cost) ----
+  check('Poison is NOT repeatable ("no more than once per round" is not a repeat clause)',
+    PF.getEvolution('Poison').repeatable === false, PF.getEvolution('Poison').repeatable);
+  check('Breath Weapon carries a +1 use/day add-on at 1pt', (PF.evolutionAddons('Breath Weapon') || [])[0].cost === 1);
+  const au = PF.newCharacter('Addons'); for (let i = 0; i < 20; i++) au.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
+  const ax = PF.newCompanion('eidolon'); ax.form = 'Quadruped'; au.companions = [ax];
+  // Breath Weapon (4) + 2 extra uses (1 each) = 6
+  ax.evolutions = [{ name: 'Breath Weapon', choice: 'fire', addons: { use: 2 } }];
+  check('Breath Weapon with 2 extra uses costs 4+1+1 = 6', PF.evolutionPool(au, ax).spent === 6, PF.evolutionPool(au, ax).spent);
+  check('breath add-ons surface in the notes', PF.eidolonEvolutionEffects(ax).notes.some(n => /Breath Weapon \(fire; \+1 use\/day/.test(n)),
+    PF.eidolonEvolutionEffects(ax).notes);
+  // Fast Healing (4) + 2 upgrades (2 each) = 8
+  ax.evolutions = [{ name: 'Fast Healing', choice: '', addons: { heal: 2 } }];
+  check('Fast Healing +2 upgrades costs 4+2+2 = 8', PF.evolutionPool(au, ax).spent === 8, PF.evolutionPool(au, ax).spent);
+  // Large (4) + Huge add-on (6) = 10; Huge stats REPLACE Large's
+  ax.evolutions = [{ name: 'Large', choice: '', addons: { huge: 1 } }];
+  check('Huge = Large 4 + 6-point add-on = 10', PF.evolutionPool(au, ax).spent === 10, PF.evolutionPool(au, ax).spent);
+  const dh = PF.companionDerived(au, ax);
+  check('Huge add-on sets size to Huge', dh.size === 'Huge', dh.size);
+  const hugeEff = PF.eidolonEvolutionEffects(ax);
+  check('Huge grants +16 Str (replacing Large\'s +8)', hugeEff.abil.str === 16, hugeEff.abil.str);
+  check('Huge grants +5 natural armor', hugeEff.natArmor === 5, hugeEff.natArmor);
+  // Ability Increase on Str/Con costs double while Large
+  ax.evolutions = [{ name: 'Large', choice: '' }, { name: 'Ability Increase', choice: 'str' }, { name: 'Ability Increase', choice: 'dex' }];
+  check('Ability Increase (Str) costs 4 on a Large eidolon; (Dex) stays 2 — 4+4+2 = 10',
+    PF.evolutionPool(au, ax).spent === 10, PF.evolutionPool(au, ax).spent);
+  // an illegal duplicate of a non-repeatable evolution applies its effect once
+  ax.evolutions = [{ name: 'Large', choice: '' }, { name: 'Large', choice: '' }];
+  const dupEff = PF.eidolonEvolutionEffects(ax);
+  check('duplicate non-repeatable Large applies only once (+8 Str, size Large)',
+    dupEff.abil.str === 8 && dupEff.size === 'Large', dupEff);
 
   // maximum-attacks cap: base bite + claws(2) + sting(1) = 4 > L1 max of 3
   const at = PF.newCharacter('Attacker'); at.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });

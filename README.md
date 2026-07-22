@@ -98,9 +98,14 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   catalog in a searchable picker, a live pool meter (spent / available) with over-budget flagging,
   and prerequisite checks (base-form restriction, minimum summoner level, required evolutions —
   free-form-granted limbs count). Repeatable evolutions can be taken multiple times, each selection
-  carrying its **own choice** — Limbs as arms *and* legs, Flight for speed *and* maneuverability,
-  Resistance to two energy types, Ability Increase to two abilities — grouped into a per-choice pill
-  with a count/stepper. The cleanly quantifiable evolutions (natural armor, ability increases, extra
+  carrying its **own choice** — Limbs as arms *and* legs, Resistance to two energy types, Ability
+  Increase to two abilities — grouped into a per-choice pill with a count/stepper. **Add-on
+  upgrades** priced separately from the base evolution are handled too: extra Breath Weapon
+  uses (+1 pt each, max 3/day), the Magic line's cast-3/day (+2 pts), Flight's magic flight and
+  +20 ft speed increments, Fast Healing increases, Undead Appearance's two tiers, Weapon
+  Training's martial proficiency, DR 10, and **Large → Huge (+6 pts, stats replacing Large's)** —
+  each purchasable on its pill, feeding the pool meter at its printed price. Ability Increase
+  automatically costs double on Str/Con while the eidolon is Large or Huge, per the rules. The cleanly quantifiable evolutions (natural armor, ability increases, extra
   natural attacks, size increase) fold live into the eidolon's stat block; the rest are tracked with
   their rules text. A second meter tracks **natural attacks against the per-level maximum** (rake
   excluded, per the rules) and flags an eidolon that's over the cap.
