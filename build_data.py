@@ -1129,7 +1129,8 @@ def parse_evolution(name, cost, body, source_name):
     prereq_evos = sorted({m.group(1).strip()
                           for m in re.finditer(r'must have the ([a-z][a-z ()]*?) evolution', t)})
     lvl = 0
-    m = re.search(r'must be at least (\d+)\w* level', t)
+    m = (re.search(r'must be at least (\d+)\w* level', t) or
+         re.search(r'requirements?:[^.]{0,80}?summoner level (\d+)', t))   # Unchained phrasing
     if m:
         lvl = int(m.group(1))
     forms = []
@@ -1161,6 +1162,32 @@ def parse_evolution(name, cost, body, source_name):
 # containers (APG has the core 49, Ultimate Magic adds 16, the Advanced Race
 # Guide adds the shadow evolutions). Scan every loaded book, dedup by name,
 # preferring the earliest source in this order for canonical wording.
+# Softcover evolutions (Bleed, Sticky, Celestial Appearance…) and the Unchained
+# Summoner's variant set exist only in the FoundryVTT compendium: class-ability
+# entries named "X (N pt/pts)" associated to class "Eidolon" / "Eidolon
+# (Unchained)". Unchained variants keep their "(UC)" tag — several differ
+# mechanically from the standard evolution of the same name.
+def extract_foundry_evolutions(existing):
+    out = []
+    for d in load_nedb('class-abilities'):
+        m = re.match(r'^(.*?)\s*\((\d+)\s*pts?\.?\)$', d.get('name') or '')
+        if not m:
+            continue
+        sysd = d.get('system') or d.get('data') or {}
+        classes = [c for pair in ((sysd.get('associations') or {}).get('classes') or []) for c in pair]
+        if not any(str(c).startswith('Eidolon') for c in classes):
+            continue
+        name, cost = m.group(1).strip(), int(m.group(2))
+        name = re.sub(r'^UItimate\b', 'Ultimate', name)   # typo'd duplicate in the pack
+        if not name or name.lower() in existing:
+            continue
+        existing.add(name.lower())
+        html = clean_foundry_html((sysd.get('description') or {}).get('value') or '')
+        src = src_from_desc(html, 'Pathfinder Unchained' if name.endswith('(UC)') else COMPENDIUM_SRC)
+        out.append(parse_evolution(name, cost, html, src))
+    return out
+
+
 def extract_eidolon_evolutions(books):
     out, seen = [], set()
     order = ['apg', 'um', 'arg'] + [k for k in books if k not in ('apg', 'um', 'arg')]
@@ -1183,6 +1210,7 @@ def extract_eidolon_evolutions(books):
                     continue
                 seen.add(nm.lower())
                 out.append(parse_evolution(nm, cost, ch.get('body') or '', bk.name))
+    out += extract_foundry_evolutions(seen)
     out.sort(key=lambda e: (e['cost'], e['name'].lower()))
     return out
 

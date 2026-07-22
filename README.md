@@ -53,7 +53,7 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 | Skills | 26 |
 | Buffs & spell effects (25 curated + the full spell library) | ~2,950 |
 | Companion species (animal companions, familiars, eidolon forms) | 69 + |
-| Eidolon evolutions (APG + Ultimate Magic + Advanced Race Guide, by point cost) | 67 |
+| Eidolon evolutions (APG, UM, ARG, softcovers, + the Unchained variant set) | 139 |
 
 ## Features
 
@@ -94,8 +94,9 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 - **Companions** — connected subsheets for animal companions & mounts, familiars, eidolons, and
   cohorts/followers, each auto-scaled from your effective class level (HD, BAB, saves, abilities,
   evolution pools, Leadership counts…). Cohorts can link to another character in your vault.
-  **Eidolons** have a full **evolution manager**: the complete APG + Ultimate Magic + ARG evolution
-  catalog in a searchable picker, a live pool meter (spent / available) with over-budget flagging,
+  **Eidolons** have a full **evolution manager**: the complete evolution catalog — APG, Ultimate
+  Magic, ARG, the softcover additions (Bleed, Sticky, Celestial/Fiendish Appearance…) and the
+  Unchained Summoner's "(UC)" variant set — in a searchable picker, a live pool meter (spent / available) with over-budget flagging,
   and prerequisite checks (base-form restriction, minimum summoner level, required evolutions —
   free-form-granted limbs count). Repeatable evolutions can be taken multiple times, each selection
   carrying its **own choice** — Limbs as arms *and* legs, Resistance to two energy types, Ability

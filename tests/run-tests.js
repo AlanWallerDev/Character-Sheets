@@ -519,6 +519,29 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
   check('distinct-choice selections surface as separate notes',
     meff.notes.filter(n => /^Limbs/.test(n)).length === 2, meff.notes);
 
+  // ---- softcover + Unchained coverage (Foundry compendium sources) ----
+  check('catalog includes the softcover evolutions (Bleed etc.)',
+    ['Bleed', 'Sticky', 'Slippery', 'Sacrifice', 'Sickening', 'Celestial Appearance', 'Fiendish Appearance',
+     'Rider Bond', 'Shared Evolution', 'Shared Slot', 'Extra Feat'].every(n => !!PF.getEvolution(n)),
+    ['Bleed', 'Sticky', 'Slippery'].map(n => !!PF.getEvolution(n)));
+  check('catalog includes the Unchained variant set', !!PF.getEvolution('Bite (UC)') && !!PF.getEvolution('Large (UC)'));
+  check('full catalog spans standard + softcover + Unchained (139)', (PFDATA.evolutions || []).length === 139, (PFDATA.evolutions || []).length);
+  check('Bleed is 1 pt and repeatable', PF.getEvolution('Bleed').cost === 1 && PF.getEvolution('Bleed').repeatable === true);
+  check('Unchained "Requirements: Summoner level 9th" parses as a level gate',
+    PF.getEvolution('Breath Weapon (UC)').minLevel === 9, PF.getEvolution('Breath Weapon (UC)').minLevel);
+  {
+    const uc = PF.newCharacter('Unchained'); for (let i = 0; i < 6; i++) uc.levels.push({ cls: 'Summoner (Unchained)', archetypes: [], hp: null, fcb: '' });
+    const ue = PF.newCompanion('eidolon'); ue.form = 'Quadruped'; uc.companions = [ue];
+    check('eidolon auto-level counts Summoner (Unchained) levels', PF.companionAutoLevel(uc, ue) === 6, PF.companionAutoLevel(uc, ue));
+    // UC attack variants share the base evolution's dice; UC Large does NOT
+    // inherit standard Large's stat block (its numbers differ in Unchained)
+    ue.evolutions = [{ name: 'Sting (UC)', choice: '' }, { name: 'Large (UC)', choice: '' }];
+    const ud = PF.companionDerived(uc, ue);
+    check('Sting (UC) auto-applies a sting attack', /sting \(1d4\)/i.test(ud.attacks), ud.attacks);
+    check('Large (UC) is tracked as a note, not standard Large stats',
+      ud.size === 'Medium' && /Large \(UC\)/.test(ud.special), { size: ud.size, special: ud.special });
+  }
+
   // ---- add-on upgrades (extra points on top of the base cost) ----
   check('Poison is NOT repeatable ("no more than once per round" is not a repeat clause)',
     PF.getEvolution('Poison').repeatable === false, PF.getEvolution('Poison').repeatable);

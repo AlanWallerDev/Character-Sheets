@@ -935,7 +935,7 @@ const PF = (() => {
     const cl = classLevels(c);
     const g = n => cl.get(n) || 0;
     switch (comp.type) {
-      case 'eidolon': return g('Summoner');
+      case 'eidolon': return g('Summoner') + g('Summoner (Unchained)');
       case 'familiar':
         return g('Wizard') + g('Sorcerer') + g('Witch') + g('Magus') + g('Arcanist') +
                g('Bloodrager') + g('Shaman') + g('Adept');
@@ -987,7 +987,12 @@ const PF = (() => {
     'major magic':      { kind: 'text', placeholder: 'spell' },
     'ultimate magic':   { kind: 'text', placeholder: 'spell' },
   };
-  const evolutionChoiceSpec = name => EVO_CHOICES[String(name || '').toLowerCase()] || null;
+  // Unchained-variant entries ("Bite (UC)") share their base evolution's attack
+  // dice and choice shape, so mechanic lookups strip the tag. Numeric effects
+  // that DIFFER in Unchained (Large's stat block) and priced add-ons stay
+  // keyed on the exact standard name.
+  const evoMechKey = n => String(n || '').toLowerCase().replace(/\s*\(uc\)$/, '');
+  const evolutionChoiceSpec = name => EVO_CHOICES[evoMechKey(name)] || null;
 
   // Add-on upgrades purchased with EXTRA evolution points on top of the base
   // cost — a different mechanic from taking the evolution again (and usually a
@@ -1135,12 +1140,13 @@ const PF = (() => {
     for (const ev of (comp.evolutions || [])) {   // each entry is one selection
       const e = getEvolution(ev.name);
       if (!e) continue;
-      const key = e.name.toLowerCase();
+      const exact = e.name.toLowerCase();
+      const key = evoMechKey(e.name);   // "bite (uc)" shares bite's mechanics
       // a non-repeatable evolution taken twice is an illegal duplicate — the UI
       // flags it; apply its mechanical effect only once
       if (!e.repeatable) {
-        if (onceSeen.has(key)) continue;
-        onceSeen.add(key);
+        if (onceSeen.has(exact)) continue;
+        onceSeen.add(exact);
       }
       if (key === 'ability increase') {
         const ab = String(ev.choice || '').toLowerCase().slice(0, 3);
@@ -1148,7 +1154,7 @@ const PF = (() => {
         else eff.notes.push('Ability Increase — choose an ability');
       } else if (key === 'improved natural armor') {
         eff.natArmor += 2;
-      } else if (key === 'large') {
+      } else if (exact === 'large') {   // exact: the Unchained Large has different numbers
         // Huge is the +6-point add-on on Large; its bonuses REPLACE Large's
         if (ev.addons && ev.addons.huge > 0) {
           eff.size = 'Huge';
