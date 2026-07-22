@@ -1046,6 +1046,20 @@ const PF = (() => {
     return { ok: reasons.length === 0, reasons };
   }
 
+  // Count the natural attacks in an attack line ("bite (1d6), 2 claws (1d4)")
+  // → 3. Each comma/semicolon segment that carries a damage die is an attack;
+  // a leading number multiplies it ("2 claws" = 2).
+  function countNaturalAttacks(str) {
+    let n = 0;
+    for (const part of String(str || '').split(/[,;]/)) {
+      const p = part.trim();
+      if (!p || !/\d*d\d+/.test(p)) continue;   // must have a damage die to be an attack
+      const m = /^(\d+)/.exec(p);
+      n += m ? parseInt(m[1], 10) : 1;
+    }
+    return n;
+  }
+
   // Aggregate the mechanically-applied effects of an eidolon's chosen
   // evolutions. Only the cleanly quantifiable ones fold into the stat block;
   // everything else is surfaced as a note (with its rules text still available
@@ -1202,13 +1216,22 @@ const PF = (() => {
         sv[s] = base + mod(s === 'fort' ? abil.con : s === 'ref' ? abil.dex : abil.wis);
       }
       // append evolution natural attacks, scaled to the eidolon's (possibly enlarged) size,
-      // skipping any the base form already grants
+      // skipping any the base form already grants. Track the natural-attack count
+      // against the level's Maximum Attacks — rake doesn't count toward that cap.
       const szIdx = /Huge|Gargantuan|Colossal/.test(size) ? 2 : /Large/.test(size) ? 1 : 0;
+      let attackCount = countNaturalAttacks(attacks);   // base-form attacks
       for (const a of evo.attacks) {
         const spec = EVO_ATTACKS[a.key];
         if (new RegExp('\\b' + a.key + '\\b', 'i').test(attacks)) continue;
         const n = spec[3] * a.sel;
         attacks += (attacks ? ', ' : '') + (n > 1 ? n + ' ' : '') + a.key + ' (' + spec[szIdx] + ')';
+        if (a.key !== 'rake') attackCount += n;
+      }
+      const maxAtk = intIn(row['Max. Attacks']);
+      out.attackCount = attackCount;
+      out.maxAttacks = maxAtk;
+      if (maxAtk && attackCount > maxAtk) {
+        out.warnings.push(attackCount + ' natural attacks exceed the maximum of ' + maxAtk + ' at this level');
       }
       out.hd = hd; out.hdDie = 10;
       out.bab = intIn(row['BAB']);
@@ -1225,7 +1248,7 @@ const PF = (() => {
       out.special = [row['Special'], evo.notes.join(', ')].filter(Boolean).join(' • ');
       const pool = evolutionPool(c, comp);
       out.extras['Evolution pool'] = pool.spent + ' / ' + pool.max + (pool.over ? ' (over budget!)' : '');
-      out.extras['Max attacks'] = row['Max. Attacks'];
+      out.extras['Max attacks'] = attackCount + ' / ' + (maxAtk || '?') + (maxAtk && attackCount > maxAtk ? ' (over cap!)' : '');
       if (free) out.extras['Free evolutions'] = free;
       return out;
     }

@@ -2796,6 +2796,8 @@
   function eidolonEvoPanel(c, comp, i) {
     const pool = PF.evolutionPool(c, comp);
     const meterCls = pool.over ? 'err' : 'ok';
+    const d = PF.companionDerived(c, comp);
+    const atkOver = d.maxAttacks && d.attackCount > d.maxAttacks;
     const groups = [], byKey = new Map();
     (comp.evolutions || []).forEach(ev => {
       const key = ev.name + ' ' + (ev.choice || '');
@@ -2831,6 +2833,7 @@
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <b style="color:var(--accent)">Evolutions</b>
         <span class="pill ${meterCls}">${pool.spent} / ${pool.max} points${pool.over ? ' — over budget' : ''}</span>
+        ${d.maxAttacks ? `<span class="pill ${atkOver ? 'err' : 'muted'}" title="natural attacks vs. the maximum for this level (rake doesn't count)">${d.attackCount} / ${d.maxAttacks} attacks${atkOver ? ' — over cap' : ''}</span>` : ''}
         <button class="small" data-addevo="${i}">+ Evolution</button>
       </div>
       <div style="margin-top:6px;line-height:2.2">${pills || '<span class="muted small">None chosen yet. The base form grants some evolutions free (bite, limbs…); spend the pool above on more. Add a repeatable evolution again with a different choice (e.g. Limbs arms + Limbs legs) for its second pill.</span>'}</div>

@@ -516,6 +516,21 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
     PF.evolutionPool(ms, me).spent === 2 + 2 + 2 + 2, PF.evolutionPool(ms, me).spent);
   check('distinct-choice selections surface as separate notes',
     meff.notes.filter(n => /^Limbs/.test(n)).length === 2, meff.notes);
+
+  // maximum-attacks cap: base bite + claws(2) + sting(1) = 4 > L1 max of 3
+  const at = PF.newCharacter('Attacker'); at.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
+  const ae = PF.newCompanion('eidolon'); ae.form = 'Quadruped'; at.companions = [ae];
+  ae.evolutions = [{ name: 'Claws', choice: '' }, { name: 'Sting', choice: '' }];
+  const da = PF.companionDerived(at, ae);
+  check('natural attack count = base bite + 2 claws + sting = 4', da.attackCount === 4, da.attackCount);
+  check('max attacks at level 1 = 3', da.maxAttacks === 3, da.maxAttacks);
+  check('exceeding the attack cap raises a warning',
+    da.warnings.some(w => /exceed the maximum/.test(w)), da.warnings);
+  // rake grants attacks that do NOT count toward the cap
+  ae.evolutions.push({ name: 'Rake', choice: '' });
+  const dr = PF.companionDerived(at, ae);
+  check('rake attacks are excluded from the cap count', dr.attackCount === 4, dr.attackCount);
+  check('rake still shows in the attack line', /rake/i.test(dr.attacks), dr.attacks);
 }
 
 // ---------------- Str-to-damage multipliers ----------------

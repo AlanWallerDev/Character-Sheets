@@ -102,7 +102,8 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   Resistance to two energy types, Ability Increase to two abilities — grouped into a per-choice pill
   with a count/stepper. The cleanly quantifiable evolutions (natural armor, ability increases, extra
   natural attacks, size increase) fold live into the eidolon's stat block; the rest are tracked with
-  their rules text.
+  their rules text. A second meter tracks **natural attacks against the per-level maximum** (rake
+  excluded, per the rules) and flags an eidolon that's over the cap.
 - **Mythic** — optional mythic tier (1–10) and path (Archmage, Champion, Guardian, Hierophant,
   Marshal, Trickster) on a dedicated tab: tier-scaled universal features, a path-ability picker,
   mythic feats and mythic spells, with the mythic power pool and surge die tracked on the Play tab.
