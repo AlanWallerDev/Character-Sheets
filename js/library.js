@@ -100,6 +100,12 @@ const Library = (() => {
           <option value="yes" ${state.qual === 'yes' ? 'selected' : ''}>Qualified only</option>
         </select>`);
       }
+    } else if (type === 'evolutions') {
+      out.push(`<select data-f="euc">
+        <option value="">List: all</option>
+        <option value="std" ${state.euc === 'std' ? 'selected' : ''}>Standard summoner</option>
+        <option value="uc" ${state.euc === 'uc' ? 'selected' : ''}>Unchained (UC)</option>
+      </select>`);
     } else if (type === 'mythicAbilities') {
       out.push(sel('mpath', 'Path', uniq((PFDATA.mythicAbilities || []).map(a => a.path))));
       out.push(sel('mtier', 'Tier', uniq((PFDATA.mythicAbilities || []).map(a => a.tier && String(a.tier)))));
@@ -139,6 +145,10 @@ const Library = (() => {
       if (type === 'buffs') {
         if (state.bcls && !(x.levels && state.bcls in x.levels)) return false;
         if (state.beff === 'yes' && !(x.changes && x.changes.length)) return false;
+      }
+      if (type === 'evolutions' && state.euc) {
+        const uc = /\(uc\)\s*$/i.test(x.name);
+        if (state.euc === 'std' ? uc : !uc) return false;
       }
       if (type === 'items' && state.cat && x.category !== state.cat) return false;
       if (type === 'archetypes' && state.acls && x.class !== state.acls) return false;

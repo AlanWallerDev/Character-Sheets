@@ -574,6 +574,21 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
   check('duplicate non-repeatable Large applies only once (+8 Str, size Large)',
     dupEff.abil.str === 8 && dupEff.size === 'Large', dupEff);
 
+  // ---- contextual catalog: no (UC)/standard twins in the same list ----
+  {
+    const std = PF.newCharacter('Chained'); std.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
+    const cat1 = PF.evolutionCatalogFor(std);
+    check('standard summoner sees no (UC) entries', !cat1.some(e => /\(UC\)$/i.test(e.name)), cat1.length);
+    check('standard list still has Bite and Bleed', ['Bite', 'Bleed'].every(n => cat1.some(e => e.name === n)));
+    const unch = PF.newCharacter('Unchained'); unch.levels.push({ cls: 'Summoner (Unchained)', archetypes: [], hp: null, fcb: '' });
+    check('eidolonIsUnchained detects the class', PF.eidolonIsUnchained(unch) === true && PF.eidolonIsUnchained(std) === false);
+    const cat2 = PF.evolutionCatalogFor(unch);
+    check('unchained summoner sees Bite (UC) but not standard Bite',
+      cat2.some(e => e.name === 'Bite (UC)') && !cat2.some(e => e.name === 'Bite'), cat2.length);
+    check('unchained list keeps un-reprinted standard evolutions (Bleed)', cat2.some(e => e.name === 'Bleed'));
+    check('opts.all returns the full 139', PF.evolutionCatalogFor(unch, { all: true }).length === 139);
+  }
+
   // ---- structured eidolon attacks (Play-tab chips) ----
   {
     const sc = PF.newCharacter('Serpent'); sc.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });

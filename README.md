@@ -96,7 +96,8 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   evolution pools, Leadership counts…). Cohorts can link to another character in your vault.
   **Eidolons** have a full **evolution manager**: the complete evolution catalog — APG, Ultimate
   Magic, ARG, the softcover additions (Bleed, Sticky, Celestial/Fiendish Appearance…) and the
-  Unchained Summoner's "(UC)" variant set — in a searchable picker, a live pool meter (spent / available) with over-budget flagging,
+  Unchained Summoner's "(UC)" variant set — in a searchable picker that shows only the list your
+  class actually uses (standard vs. Unchained, with a "show all versions" toggle), a live pool meter (spent / available) with over-budget flagging,
   and prerequisite checks (base-form restriction, minimum summoner level, required evolutions —
   free-form-granted limbs count). Repeatable evolutions can be taken multiple times, each selection
   carrying its **own choice** — Limbs as arms *and* legs, Resistance to two energy types, Ability

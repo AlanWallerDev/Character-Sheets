@@ -995,7 +995,30 @@ const PF = (() => {
   // that DIFFER in Unchained (Large's stat block) and priced add-ons stay
   // keyed on the exact standard name.
   const evoMechKey = n => String(n || '').toLowerCase().replace(/\s*\(uc\)$/, '');
+  const isUCEvolution = n => /\(uc\)\s*$/i.test(String(n || ''));
   const evolutionChoiceSpec = name => EVO_CHOICES[evoMechKey(name)] || null;
+
+  // Which evolution list applies to this character's eidolon: the Unchained
+  // Summoner uses the rebalanced "(UC)" reprints, the standard summoner the
+  // originals. (A chained Summoner level wins if someone multiclasses both.)
+  function eidolonIsUnchained(c) {
+    const cl = classLevels(c);
+    return (cl.get('Summoner (Unchained)') || 0) > 0 && !(cl.get('Summoner') || 0);
+  }
+
+  // The class-appropriate evolution catalog: standard summoners never see the
+  // "(UC)" twins; unchained summoners see the UC list plus any standard
+  // evolution Unchained never reprinted (Bleed, the softcover additions…).
+  // opts.all returns everything (the picker's "show all versions" toggle).
+  function evolutionCatalogFor(c, opts) {
+    const all = PFDATA.evolutions || [];
+    if (opts && opts.all) return all;
+    if (eidolonIsUnchained(c)) {
+      const ucBases = new Set(all.filter(e => isUCEvolution(e.name)).map(e => evoMechKey(e.name)));
+      return all.filter(e => isUCEvolution(e.name) || !ucBases.has(evoMechKey(e.name)));
+    }
+    return all.filter(e => !isUCEvolution(e.name));
+  }
 
   // Add-on upgrades purchased with EXTRA evolution points on top of the base
   // cost — a different mechanic from taking the evolution again (and usually a
@@ -2074,6 +2097,7 @@ const PF = (() => {
     getCompSpecies, getFamiliarSpecies,
     getEvolution, evolutionChoiceSpec, evolutionAddons, evolutionEntryCost,
     evolutionPool, evolutionPrereqs, eidolonEvolutionEffects,
+    eidolonIsUnchained, evolutionCatalogFor,
     CONDITIONS, newPlayState, hasPlayPenalties, stackTotal, effective, currentHP, rollDice,
     buffLibrary, invalidateCaches, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
     featPrereqs, checkFeatPrereqs, featParents, casterLevelOf, maxSpellLevel,

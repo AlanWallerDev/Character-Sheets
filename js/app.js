@@ -2888,15 +2888,17 @@
   }
 
   function evolutionPicker(c, comp, onPick) {
-    const all = PFDATA.evolutions || [];
-    let q = '';
+    let q = '', showAll = false;
+    const unchained = PF.eidolonIsUnchained(c);
     const m = openModal('Add Evolution — ' + (comp.name || 'eidolon'), '');
     function draw() {
       const pool = PF.evolutionPool(c, comp);
+      const all = PF.evolutionCatalogFor(c, { all: showAll });
       const list = all.filter(e => !q || e.name.toLowerCase().includes(q) || (e.desc || '').toLowerCase().includes(q));
       m.body.innerHTML = `
         <p class="small muted" style="margin:0 0 6px">Pool: <b class="${pool.over ? 'err' : 'ok'}">${pool.spent} / ${pool.max}</b> spent, ${pool.remaining} left.
-          You can still add evolutions that don't fit or qualify — they're flagged.</p>
+          Showing the <b>${unchained ? 'Unchained Summoner' : 'standard'}</b> evolution list.
+          <label style="white-space:nowrap"><input type="checkbox" id="evo-all" ${showAll ? 'checked' : ''}> show all versions</label></p>
         <input id="evo-q" placeholder="Search evolutions…" value="${esc(q)}" style="width:100%;margin-bottom:8px">
         <div style="max-height:52vh;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--bg2)">
           ${[1, 2, 3, 4].map(cost => {
@@ -2922,6 +2924,7 @@
         draw();
         const nq = m.body.querySelector('#evo-q'); nq.focus(); nq.setSelectionRange(pos, pos);
       });
+      m.body.querySelector('#evo-all').addEventListener('change', ev => { showAll = ev.target.checked; draw(); });
       m.body.querySelectorAll('[data-evopick]').forEach(el => el.addEventListener('click', () => {
         m.close(); onPick(el.dataset.evopick);
       }));
