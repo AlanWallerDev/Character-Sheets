@@ -1154,53 +1154,32 @@ def parse_evolution(name, cost, body, source_name):
     }
 
 
-# Ultimate Magic adds a second batch of evolutions that aren't in the sqlite
-# books — they live only in the PSRD JSON release tree. Walk that file's
-# X-Point sections and parse each evolution the same way.
-def extract_um_evolutions():
-    import glob
-    files = glob.glob(os.path.join(SRC, 'ultimate_magic', '**', 'evolutions.json'), recursive=True)
-    if not files:
-        return []
-    with open(files[0], encoding='utf-8') as fh:
-        root = json.load(fh)
-    out = []
-
-    def walk(node):
-        if not isinstance(node, dict):
-            return
-        m = re.match(r'(\d)-Point Evolutions', node.get('name') or '')
-        if m:
-            cost = int(m.group(1))
-            for ch in node.get('sections', []) or []:
-                if ch.get('name') and ch.get('type') == 'ability':
-                    out.append(parse_evolution(ch['name'], cost, ch.get('body') or '', 'Ultimate Magic'))
-            return
-        for k in ('sections', 'subsections'):
-            for s in node.get(k, []) or []:
-                walk(s)
-
-    walk(root)
-    return out
-
-
+# Eidolon evolutions live in several books as "N-Point Evolutions" section
+# containers (APG has the core 49, Ultimate Magic adds 16, the Advanced Race
+# Guide adds the shadow evolutions). Scan every loaded book, dedup by name,
+# preferring the earliest source in this order for canonical wording.
 def extract_eidolon_evolutions(books):
-    apg = books['apg']
     out, seen = [], set()
-    for r in apg.rows:
-        m = re.match(r'(\d)-Point Evolutions', r['name'] or '')
-        if not m:
+    order = ['apg', 'um', 'arg'] + [k for k in books if k not in ('apg', 'um', 'arg')]
+    for key in order:
+        bk = books.get(key)
+        if not bk:
             continue
-        cost = int(m.group(1))
-        for ch in apg.kids(r['section_id']):
-            if not ch.get('name'):
+        for r in bk.rows:
+            m = re.match(r'(\d)-Point Evolution', r['name'] or '')
+            if not m:
                 continue
-            out.append(parse_evolution(ch['name'], cost, ch.get('body') or '', apg.name))
-            seen.add(ch['name'].lower())
-    for e in extract_um_evolutions():
-        if e['name'].lower() not in seen:
-            out.append(e)
-            seen.add(e['name'].lower())
+            cost = int(m.group(1))
+            for ch in bk.kids(r['section_id']):
+                nm = ch.get('name')
+                if not nm or not ch.get('body'):
+                    continue
+                # some books tag the ability type in the name ("Shadow Blend (Su)")
+                nm = re.sub(r'\s*\((?:Su|Ex|Sp)\)\s*$', '', nm).strip()
+                if not nm or nm.lower() in seen:
+                    continue
+                seen.add(nm.lower())
+                out.append(parse_evolution(nm, cost, ch.get('body') or '', bk.name))
     out.sort(key=lambda e: (e['cost'], e['name'].lower()))
     return out
 

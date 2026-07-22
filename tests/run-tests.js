@@ -452,14 +452,16 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
   check('L8 eidolon pool max = 11', PF.evolutionPool(ev, eid).max === 11, PF.evolutionPool(ev, eid).max);
   check('empty pool spends 0', PF.evolutionPool(ev, eid).spent === 0);
 
+  // one entry per selection (repeated Improved Natural Armor = two entries)
   eid.evolutions = [
-    { name: 'Improved Natural Armor', ranks: 2, choice: '' },  // 2pt
-    { name: 'Ability Increase', ranks: 1, choice: 'str' },     // 2pt
-    { name: 'Claws', ranks: 1, choice: '' },                   // 1pt
-    { name: 'Large', ranks: 1, choice: '' },                   // 4pt
+    { name: 'Improved Natural Armor', choice: '' },  // 1pt
+    { name: 'Improved Natural Armor', choice: '' },  // 1pt (×2 total)
+    { name: 'Ability Increase', choice: 'str' },     // 2pt
+    { name: 'Claws', choice: '' },                   // 1pt
+    { name: 'Large', choice: '' },                   // 4pt
   ];
   const pool = PF.evolutionPool(ev, eid);
-  check('pool spent = 2+2+1+4 = 9', pool.spent === 9, pool.spent);
+  check('pool spent = 1+1+2+1+4 = 9', pool.spent === 9, pool.spent);
   check('pool not over budget at 9/11', pool.over === false, pool);
 
   const eff = PF.eidolonEvolutionEffects(eid);
@@ -492,9 +494,28 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
     PF.evolutionPrereqs(ev4, eid4, PF.getEvolution('Large')).reasons);
 
   // over-budget detection
-  eid.evolutions = [{ name: 'Large', ranks: 1, choice: '' }, { name: 'Breath Weapon', ranks: 1, choice: 'fire' },
-    { name: 'Fast Healing', ranks: 1, choice: '' }, { name: 'Large', ranks: 1, choice: '' }];
+  eid.evolutions = [{ name: 'Large', choice: '' }, { name: 'Breath Weapon', choice: 'fire' },
+    { name: 'Fast Healing', choice: '' }, { name: 'Large', choice: '' }];
   check('pool flags over budget when overspent', PF.evolutionPool(ev, eid).over === true, PF.evolutionPool(ev, eid));
+
+  // per-selection choices: the same evolution taken for different functions
+  const ms = PF.newCharacter('Multi-Select'); for (let i = 0; i < 10; i++) ms.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
+  const me = PF.newCompanion('eidolon'); me.form = 'Quadruped'; ms.companions = [me];
+  check('Limbs has an arms/legs choice spec', PF.evolutionChoiceSpec('Limbs').options.join() === 'arms,legs');
+  check('Flight has a speed/maneuverability choice spec', PF.evolutionChoiceSpec('Flight').kind === 'select');
+  me.evolutions = [
+    { name: 'Ability Increase', choice: 'str' },
+    { name: 'Ability Increase', choice: 'dex' },   // second selection, different ability
+    { name: 'Limbs', choice: 'arms' },
+    { name: 'Limbs', choice: 'legs' },             // two limb sets, distinct functions
+  ];
+  const meff = PF.eidolonEvolutionEffects(me);
+  check('two Ability Increases apply to their two different abilities',
+    meff.abil.str === 2 && meff.abil.dex === 2, meff.abil);
+  check('both Limbs selections are pooled (2pt each ×2 = 4)',
+    PF.evolutionPool(ms, me).spent === 2 + 2 + 2 + 2, PF.evolutionPool(ms, me).spent);
+  check('distinct-choice selections surface as separate notes',
+    meff.notes.filter(n => /^Limbs/.test(n)).length === 2, meff.notes);
 }
 
 // ---------------- Str-to-damage multipliers ----------------

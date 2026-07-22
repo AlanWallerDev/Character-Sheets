@@ -53,7 +53,7 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 | Skills | 26 |
 | Buffs & spell effects (25 curated + the full spell library) | ~2,950 |
 | Companion species (animal companions, familiars, eidolon forms) | 69 + |
-| Eidolon evolutions (full APG + Ultimate Magic catalog, by point cost) | 65 |
+| Eidolon evolutions (APG + Ultimate Magic + Advanced Race Guide, by point cost) | 67 |
 
 ## Features
 
@@ -94,12 +94,15 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 - **Companions** — connected subsheets for animal companions & mounts, familiars, eidolons, and
   cohorts/followers, each auto-scaled from your effective class level (HD, BAB, saves, abilities,
   evolution pools, Leadership counts…). Cohorts can link to another character in your vault.
-  **Eidolons** have a full **evolution manager**: the complete APG + Ultimate Magic evolution
-  catalog in a searchable picker, a live pool meter (spent / available) with over-budget flagging, rank
-  steppers for repeatable evolutions, and prerequisite checks (base-form restriction, minimum
-  summoner level, required evolutions — free-form-granted limbs count). The cleanly quantifiable
-  evolutions (natural armor, ability increases, extra natural attacks, size increase) fold live
-  into the eidolon's stat block; the rest are tracked with their rules text.
+  **Eidolons** have a full **evolution manager**: the complete APG + Ultimate Magic + ARG evolution
+  catalog in a searchable picker, a live pool meter (spent / available) with over-budget flagging,
+  and prerequisite checks (base-form restriction, minimum summoner level, required evolutions —
+  free-form-granted limbs count). Repeatable evolutions can be taken multiple times, each selection
+  carrying its **own choice** — Limbs as arms *and* legs, Flight for speed *and* maneuverability,
+  Resistance to two energy types, Ability Increase to two abilities — grouped into a per-choice pill
+  with a count/stepper. The cleanly quantifiable evolutions (natural armor, ability increases, extra
+  natural attacks, size increase) fold live into the eidolon's stat block; the rest are tracked with
+  their rules text.
 - **Mythic** — optional mythic tier (1–10) and path (Archmage, Champion, Guardian, Hierophant,
   Marshal, Trickster) on a dedicated tab: tier-scaled universal features, a path-ability picker,
   mythic feats and mythic spells, with the mythic power pool and surge die tracked on the Play tab.

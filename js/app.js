@@ -230,6 +230,22 @@
     : { label: toStr(ca.label), count: toInt(ca.count, 1), atkAbility: toStr(ca.atkAbility), type: toStr(ca.type),
         dice: toStr(ca.dice), dmgMult: toStr(ca.dmgMult), atkBonus: toInt(ca.atkBonus), dmgBonus: toInt(ca.dmgBonus),
         bonusDice: toStr(ca.bonusDice) };
+  // Evolutions are stored one entry per selection: {name, choice}. Legacy data
+  // used a `ranks` count with a single shared choice — expand each into `ranks`
+  // separate selections so a repeated evolution can carry distinct choices.
+  function sanEvolutions(arr) {
+    const out = [];
+    if (!Array.isArray(arr)) return out;
+    for (const e of arr) {
+      if (!e || typeof e !== 'object') continue;
+      const name = toStr(e.name);
+      if (!name) continue;
+      const choice = toStr(e.choice);
+      const n = Math.max(1, toInt(e.ranks, 1));   // legacy ranks → repeated entries
+      for (let k = 0; k < n; k++) out.push({ name, choice });
+    }
+    return out;
+  }
   function sanCompanion(comp) {
     const abilityOverride = {};
     for (const ab of PF.ABILITIES) {
@@ -242,7 +258,7 @@
       name: toStr(comp.name), species: toStr(comp.species), form: toStr(comp.form) || 'Quadruped',
       effOverride: toIntOrNull(comp.effOverride), hpOverride: toIntOrNull(comp.hpOverride),
       leadMod: toInt(comp.leadMod), abilityOverride, miscNatArmor: toInt(comp.miscNatArmor),
-      evolutions: objArr(comp.evolutions, e => ({ name: toStr(e.name), ranks: Math.max(1, toInt(e.ranks, 1)), choice: toStr(e.choice) })),
+      evolutions: sanEvolutions(comp.evolutions),
       attacks: toStr(comp.attacks), tricks: toStr(comp.tricks), gear: toStr(comp.gear),
       notes: toStr(comp.notes), linkedId: toStr(comp.linkedId),
     };
@@ -2771,48 +2787,45 @@
   }
 
   // ----- eidolon evolutions -----
-  // some evolutions need a specifier the auto-apply / notes use: an ability for
-  // Ability Increase, an energy type, a skill name, etc.
-  function evoChoiceKind(name) {
-    const k = name.toLowerCase();
-    if (k === 'ability increase') return 'ability';
-    if (['resistance', 'immunity', 'energy attacks', 'breath weapon'].includes(k)) return 'energy';
-    if (k === 'skilled') return 'skill';
-    if (k === 'damage reduction') return 'text';
-    return null;
-  }
-
-  // The evolution manager shown on an eidolon's card: a pool meter, the chosen
-  // evolutions as pills (rank steppers for repeatable ones, a choice input where
-  // one's needed, prereq flags), and a "+ Evolution" picker.
+  // The evolution manager on an eidolon's card: a pool meter, the chosen
+  // evolutions as pills, and a "+ Evolution" picker. Each selection is stored
+  // separately (one entry per pick), but identical (name + choice) selections
+  // are grouped into a single pill with a count/stepper — so a repeated
+  // evolution can carry DIFFERENT choices in separate pills (Limbs arms + Limbs
+  // legs, Flight speed + Flight maneuverability, Resistance fire + cold…).
   function eidolonEvoPanel(c, comp, i) {
     const pool = PF.evolutionPool(c, comp);
-    const chosen = comp.evolutions || [];
     const meterCls = pool.over ? 'err' : 'ok';
-    const pills = chosen.map((ev, j) => {
-      const e = PF.getEvolution(ev.name);
+    const groups = [], byKey = new Map();
+    (comp.evolutions || []).forEach(ev => {
+      const key = ev.name + ' ' + (ev.choice || '');
+      let g = byKey.get(key);
+      if (!g) { g = { name: ev.name, choice: ev.choice || '', count: 0 }; byKey.set(key, g); groups.push(g); }
+      g.count++;
+    });
+    const pills = groups.map(g => {
+      const e = PF.getEvolution(g.name);
       const cost = e ? e.cost : '?';
-      const kind = evoChoiceKind(ev.name);
+      const spec = PF.evolutionChoiceSpec(g.name);
       const pre = e ? PF.evolutionPrereqs(c, comp, e) : { ok: true, reasons: [] };
-      const ranks = Math.max(1, ev.ranks || 1);
+      const dn = `data-evoname="${esc(g.name)}" data-evoch="${esc(g.choice)}"`;
       let choiceHtml = '';
-      if (kind === 'ability') {
-        choiceHtml = `<select data-evochoice="${i}:${j}" style="padding:1px 3px">
-          <option value="">— ability —</option>
-          ${PF.ABILITIES.map(ab => `<option value="${ab}" ${String(ev.choice).toLowerCase().slice(0, 3) === ab ? 'selected' : ''}>${ab.toUpperCase()}</option>`).join('')}</select>`;
-      } else if (kind) {
-        const ph = kind === 'energy' ? 'fire, cold…' : kind === 'skill' ? 'skill' : 'type';
-        choiceHtml = `<input data-evochoice="${i}:${j}" value="${esc(ev.choice || '')}" placeholder="${ph}" style="width:72px;padding:1px 4px">`;
+      if (spec && spec.kind === 'select') {
+        choiceHtml = `<select data-evochoice="${i}" ${dn} style="padding:1px 3px">
+          <option value="">— choose —</option>
+          ${spec.options.map(o => `<option value="${esc(o)}" ${g.choice === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      } else if (spec && spec.kind === 'text') {
+        choiceHtml = `<input data-evochoice="${i}" ${dn} value="${esc(g.choice)}" placeholder="${esc(spec.placeholder || '')}" style="width:96px;padding:1px 4px">`;
       }
-      const rankHtml = (e && e.repeatable)
-        ? `<button class="small" data-evorank="${i}:${j}:-1" title="fewer">−</button><b title="ranks">${ranks}</b><button class="small" data-evorank="${i}:${j}:1" title="more">＋</button>`
+      const stepper = (e && e.repeatable)
+        ? `<button class="small" data-evostep="${i}:-1" ${dn} title="one fewer">−</button><b title="selections">${g.count}</b><button class="small" data-evostep="${i}:1" ${dn} title="one more">＋</button>`
         : '';
       return `<span class="pill ${pre.ok ? 'gold' : 'pill-unmet'}" style="white-space:nowrap">
-        <span class="ref" data-rt="evolution" data-rn="${esc(ev.name)}">${esc(ev.name)}</span>
-        <span class="muted">(${cost}pt${ranks > 1 ? '×' + ranks : ''})</span>
-        ${rankHtml} ${choiceHtml}
+        <span class="ref" data-rt="evolution" data-rn="${esc(g.name)}">${esc(g.name)}</span>
+        <span class="muted">(${cost}pt${g.count > 1 ? ' ×' + g.count : ''})</span>
+        ${choiceHtml} ${stepper}
         ${pre.ok ? '' : `<span class="err" title="${esc('Prereq: ' + pre.reasons.join('; '))}">⚠</span>`}
-        <a href="#" data-evodel="${i}:${j}" style="text-decoration:none">✕</a></span>`;
+        <a href="#" data-evodel="${i}" ${dn} style="text-decoration:none">✕</a></span>`;
     }).join(' ');
     return `<div class="panel" style="margin:6px 0;padding:8px 12px;background:var(--bg2)">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -2820,7 +2833,7 @@
         <span class="pill ${meterCls}">${pool.spent} / ${pool.max} points${pool.over ? ' — over budget' : ''}</span>
         <button class="small" data-addevo="${i}">+ Evolution</button>
       </div>
-      <div style="margin-top:6px;line-height:2">${pills || '<span class="muted small">None chosen yet. The base form grants some evolutions free (bite, limbs…); spend the pool above on more.</span>'}</div>
+      <div style="margin-top:6px;line-height:2.2">${pills || '<span class="muted small">None chosen yet. The base form grants some evolutions free (bite, limbs…); spend the pool above on more. Add a repeatable evolution again with a different choice (e.g. Limbs arms + Limbs legs) for its second pill.</span>'}</div>
     </div>`;
   }
 
@@ -3030,24 +3043,34 @@
       const comp = c.companions[+b.dataset.addevo];
       evolutionPicker(c, comp, name => {
         if (!Array.isArray(comp.evolutions)) comp.evolutions = [];
-        comp.evolutions.push({ name, ranks: 1, choice: '' });
+        comp.evolutions.push({ name, choice: '' });
         save(); render();
       });
     }));
+    // evolution pills are grouped by (name + choice); handlers match on that pair
     main.querySelectorAll('[data-evodel]').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
-      const [i, j] = a.dataset.evodel.split(':');
-      c.companions[+i].evolutions.splice(+j, 1); save(); render();
+      const comp = c.companions[+a.dataset.evodel];
+      comp.evolutions = (comp.evolutions || []).filter(ev => !(ev.name === a.dataset.evoname && (ev.choice || '') === a.dataset.evoch));
+      save(); render();
     }));
-    main.querySelectorAll('[data-evorank]').forEach(b => b.addEventListener('click', () => {
-      const [i, j, d] = b.dataset.evorank.split(':');
-      const ev = c.companions[+i].evolutions[+j];
-      ev.ranks = Math.max(1, (ev.ranks || 1) + parseInt(d, 10));
+    main.querySelectorAll('[data-evostep]').forEach(b => b.addEventListener('click', () => {
+      const [i, d] = b.dataset.evostep.split(':');
+      const comp = c.companions[+i];
+      const name = b.dataset.evoname, ch = b.dataset.evoch;
+      if (parseInt(d, 10) > 0) {
+        comp.evolutions.push({ name, choice: ch });
+      } else {
+        const last = comp.evolutions.map((ev, k) => ({ ev, k })).filter(x => x.ev.name === name && (x.ev.choice || '') === ch).pop();
+        if (last) comp.evolutions.splice(last.k, 1);
+      }
       save(); render();
     }));
     main.querySelectorAll('[data-evochoice]').forEach(el => el.addEventListener('change', () => {
-      const [i, j] = el.dataset.evochoice.split(':');
-      c.companions[+i].evolutions[+j].choice = el.value; save(); render();
+      const comp = c.companions[+el.dataset.evochoice];
+      const name = el.dataset.evoname, old = el.dataset.evoch;
+      for (const ev of comp.evolutions) if (ev.name === name && (ev.choice || '') === old) ev.choice = el.value;
+      save(); render();
     }));
     attachRefPopovers(main, c);
   }

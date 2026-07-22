@@ -968,6 +968,27 @@ const PF = (() => {
   const getEvolution = n => (PFDATA.evolutions || []).find(e =>
     e.name.toLowerCase() === String(n || '').toLowerCase());
 
+  // Evolutions each selection can point at a different function or specifier.
+  // { kind: 'select'|'text', options?, placeholder? } keyed by evolution name.
+  const EVO_CHOICES = {
+    'ability increase': { kind: 'select', options: ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha'] },
+    'limbs':            { kind: 'select', options: ['arms', 'legs'] },
+    'flight':           { kind: 'select', options: ['fly speed +20 ft', 'maneuverability +1 step'] },
+    'resistance':       { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
+    'immunity':         { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
+    'energy attacks':   { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
+    'breath weapon':    { kind: 'select', options: ['acid', 'cold', 'electricity', 'fire', 'sonic'] },
+    'skilled':          { kind: 'text', placeholder: 'skill' },
+    'reach':            { kind: 'text', placeholder: 'which attack' },
+    'damage reduction': { kind: 'text', placeholder: 'e.g. magic, cold iron' },
+    'weapon training':  { kind: 'text', placeholder: 'weapon group' },
+    'basic magic':      { kind: 'text', placeholder: 'spell' },
+    'minor magic':      { kind: 'text', placeholder: 'spell' },
+    'major magic':      { kind: 'text', placeholder: 'spell' },
+    'ultimate magic':   { kind: 'text', placeholder: 'spell' },
+  };
+  const evolutionChoiceSpec = name => EVO_CHOICES[String(name || '').toLowerCase()] || null;
+
   // Natural-attack evolutions the app can add to the eidolon's attack line.
   // [Medium, Large, Huge damage dice, number of attacks per rank, secondary?]
   const EVO_ATTACKS = {
@@ -992,7 +1013,7 @@ const PF = (() => {
     let spent = 0;
     for (const ev of (comp.evolutions || [])) {
       const e = getEvolution(ev.name);
-      if (e) spent += e.cost * Math.max(1, ev.ranks || 1);
+      if (e) spent += e.cost;   // one entry per selection
     }
     return { max, spent, remaining: max - spent, over: spent > max };
   }
@@ -1031,27 +1052,30 @@ const PF = (() => {
   // in the picker / hover popover). -> { abil{}, natArmor, size|null, attacks:[{key,ranks}], notes:[] }
   function eidolonEvolutionEffects(comp) {
     const eff = { abil: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, natArmor: 0, size: null, attacks: [], notes: [] };
-    for (const ev of (comp.evolutions || [])) {
+    let large = 0;
+    const atkCount = {}, noteSeen = new Set();
+    for (const ev of (comp.evolutions || [])) {   // each entry is one selection
       const e = getEvolution(ev.name);
       if (!e) continue;
-      const ranks = Math.max(1, ev.ranks || 1);
       const key = e.name.toLowerCase();
       if (key === 'ability increase') {
         const ab = String(ev.choice || '').toLowerCase().slice(0, 3);
-        if (ABILITIES.includes(ab)) eff.abil[ab] += 2 * ranks;
+        if (ABILITIES.includes(ab)) eff.abil[ab] += 2;
         else eff.notes.push('Ability Increase — choose an ability');
       } else if (key === 'improved natural armor') {
-        eff.natArmor += 2 * ranks;
+        eff.natArmor += 2;
       } else if (key === 'large') {
-        eff.size = ranks >= 2 ? 'Huge' : 'Large';
-        eff.abil.str += 8 * ranks; eff.abil.con += 4 * ranks; eff.abil.dex -= 2 * ranks;
-        eff.natArmor += 2 * ranks;
+        large += 1;
+        eff.abil.str += 8; eff.abil.con += 4; eff.abil.dex -= 2; eff.natArmor += 2;
       } else if (EVO_ATTACKS[key]) {
-        eff.attacks.push({ key, ranks });
+        atkCount[key] = (atkCount[key] || 0) + 1;
       } else {
-        eff.notes.push(e.name + (ev.choice ? ' (' + ev.choice + ')' : '') + (ranks > 1 ? ' ×' + ranks : ''));
+        const label = e.name + (ev.choice ? ' (' + ev.choice + ')' : '');
+        if (!noteSeen.has(label)) { noteSeen.add(label); eff.notes.push(label); }
       }
     }
+    if (large >= 2) eff.size = 'Huge'; else if (large === 1) eff.size = 'Large';
+    eff.attacks = Object.entries(atkCount).map(([key, sel]) => ({ key, sel }));
     return eff;
   }
 
@@ -1183,7 +1207,7 @@ const PF = (() => {
       for (const a of evo.attacks) {
         const spec = EVO_ATTACKS[a.key];
         if (new RegExp('\\b' + a.key + '\\b', 'i').test(attacks)) continue;
-        const n = spec[3] * a.ranks;
+        const n = spec[3] * a.sel;
         attacks += (attacks ? ', ' : '') + (n > 1 ? n + ' ' : '') + a.key + ' (' + spec[szIdx] + ')';
       }
       out.hd = hd; out.hdDie = 10;
@@ -1876,7 +1900,7 @@ const PF = (() => {
     getClass, getClassAbility, getRace, getFeat, getSpell, getWeapon, getArmor, getItem,
     COMPANION_TYPES, newCompanion, companionAutoLevel, companionEffLevel, companionDerived,
     getCompSpecies, getFamiliarSpecies,
-    getEvolution, evolutionPool, evolutionPrereqs, eidolonEvolutionEffects,
+    getEvolution, evolutionChoiceSpec, evolutionPool, evolutionPrereqs, eidolonEvolutionEffects,
     CONDITIONS, newPlayState, hasPlayPenalties, stackTotal, effective, currentHP, rollDice,
     buffLibrary, invalidateCaches, spellToBuff, parseSpellChanges, parseChanges, featureChanges,
     featPrereqs, checkFeatPrereqs, featParents, casterLevelOf, maxSpellLevel,
