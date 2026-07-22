@@ -440,7 +440,8 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
 
 // ---------------- eidolon evolutions ----------------
 {
-  check('evolution catalog loaded', (PFDATA.evolutions || []).length >= 40, (PFDATA.evolutions || []).length);
+  check('evolution catalog loaded (APG + UM)', (PFDATA.evolutions || []).length >= 60, (PFDATA.evolutions || []).length);
+  check('Hooves (Ultimate Magic) is in the catalog', !!PF.getEvolution('Hooves'));
   const ev = PF.newCharacter('Summoner');
   for (let i = 0; i < 8; i++) ev.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
   const eid = PF.newCompanion('eidolon');

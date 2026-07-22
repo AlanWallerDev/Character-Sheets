@@ -977,6 +977,7 @@ const PF = (() => {
     'slam':        ['1d8', '2d6', '2d8', 1, false],
     'sting':       ['1d4', '1d6', '1d8', 1, false],
     'tail slap':   ['1d6', '1d8', '2d6', 1, true],
+    'hooves':      ['1d4', '1d6', '1d8', 2, true],
     'tentacle':    ['1d4', '1d6', '1d8', 1, true],
     'pincers':     ['1d6', '1d8', '2d6', 2, true],
     'wing buffet': ['1d4', '1d6', '1d8', 2, true],

@@ -53,7 +53,7 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 | Skills | 26 |
 | Buffs & spell effects (25 curated + the full spell library) | ~2,950 |
 | Companion species (animal companions, familiars, eidolon forms) | 69 + |
-| Eidolon evolutions (full APG catalog, by point cost) | 49 |
+| Eidolon evolutions (full APG + Ultimate Magic catalog, by point cost) | 65 |
 
 ## Features
 
@@ -94,8 +94,8 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
 - **Companions** — connected subsheets for animal companions & mounts, familiars, eidolons, and
   cohorts/followers, each auto-scaled from your effective class level (HD, BAB, saves, abilities,
   evolution pools, Leadership counts…). Cohorts can link to another character in your vault.
-  **Eidolons** have a full **evolution manager**: the complete APG evolution catalog in a
-  searchable picker, a live pool meter (spent / available) with over-budget flagging, rank
+  **Eidolons** have a full **evolution manager**: the complete APG + Ultimate Magic evolution
+  catalog in a searchable picker, a live pool meter (spent / available) with over-budget flagging, rank
   steppers for repeatable evolutions, and prerequisite checks (base-form restriction, minimum
   summoner level, required evolutions — free-form-granted limbs count). The cleanly quantifiable
   evolutions (natural armor, ability increases, extra natural attacks, size increase) fold live

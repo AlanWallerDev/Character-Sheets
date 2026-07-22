@@ -1154,9 +1154,39 @@ def parse_evolution(name, cost, body, source_name):
     }
 
 
+# Ultimate Magic adds a second batch of evolutions that aren't in the sqlite
+# books — they live only in the PSRD JSON release tree. Walk that file's
+# X-Point sections and parse each evolution the same way.
+def extract_um_evolutions():
+    import glob
+    files = glob.glob(os.path.join(SRC, 'ultimate_magic', '**', 'evolutions.json'), recursive=True)
+    if not files:
+        return []
+    with open(files[0], encoding='utf-8') as fh:
+        root = json.load(fh)
+    out = []
+
+    def walk(node):
+        if not isinstance(node, dict):
+            return
+        m = re.match(r'(\d)-Point Evolutions', node.get('name') or '')
+        if m:
+            cost = int(m.group(1))
+            for ch in node.get('sections', []) or []:
+                if ch.get('name') and ch.get('type') == 'ability':
+                    out.append(parse_evolution(ch['name'], cost, ch.get('body') or '', 'Ultimate Magic'))
+            return
+        for k in ('sections', 'subsections'):
+            for s in node.get(k, []) or []:
+                walk(s)
+
+    walk(root)
+    return out
+
+
 def extract_eidolon_evolutions(books):
     apg = books['apg']
-    out = []
+    out, seen = [], set()
     for r in apg.rows:
         m = re.match(r'(\d)-Point Evolutions', r['name'] or '')
         if not m:
@@ -1166,6 +1196,11 @@ def extract_eidolon_evolutions(books):
             if not ch.get('name'):
                 continue
             out.append(parse_evolution(ch['name'], cost, ch.get('body') or '', apg.name))
+            seen.add(ch['name'].lower())
+    for e in extract_um_evolutions():
+        if e['name'].lower() not in seen:
+            out.append(e)
+            seen.add(e['name'].lower())
     out.sort(key=lambda e: (e['cost'], e['name'].lower()))
     return out
 
