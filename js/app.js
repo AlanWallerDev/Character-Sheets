@@ -271,6 +271,18 @@
       effOverride: toIntOrNull(comp.effOverride), hpOverride: toIntOrNull(comp.hpOverride),
       leadMod: toInt(comp.leadMod), abilityOverride, miscNatArmor: toInt(comp.miscNatArmor),
       evolutions: sanEvolutions(comp.evolutions),
+      atkEnh: toInt(comp.atkEnh),
+      attackMods: (() => {
+        const out = {};
+        if (comp.attackMods && typeof comp.attackMods === 'object' && !Array.isArray(comp.attackMods)) {
+          for (const [k, v] of Object.entries(comp.attackMods)) {
+            if (!v || typeof v !== 'object') continue;
+            const m = { atk: toInt(v.atk), dmg: toInt(v.dmg), dice: toStr(v.dice), off: !!v.off };
+            if (m.atk || m.dmg || m.dice || m.off) out[toStr(k).toLowerCase()] = m;
+          }
+        }
+        return out;
+      })(),
       attacks: toStr(comp.attacks), tricks: toStr(comp.tricks), gear: toStr(comp.gear),
       notes: toStr(comp.notes), linkedId: toStr(comp.linkedId),
     };
@@ -3013,7 +3025,25 @@
           ${PF.ABILITIES.map(ab => `<label style="margin-right:8px">${ab.toUpperCase()}
             <input class="tiny" type="number" data-cab="${i}:${ab}" value="${(comp.abilityOverride || {})[ab] != null ? comp.abilityOverride[ab] : ''}" placeholder="auto"></label>`).join('')}
           <label style="margin-left:10px">Misc natural armor <input class="tiny" type="number" data-cnat="${i}" value="${comp.miscNatArmor || 0}"></label>
+          <label style="margin-left:10px" title="enhancement bonus on natural attacks (amulet of mighty fists) — adds to hit and damage">Attack enh. <input class="tiny" type="number" data-catkenh="${i}" value="${comp.atkEnh || 0}"></label>
         </details>` : ''}
+        ${isEid ? (() => {
+          const dd = PF.companionDerived(c, comp);
+          const rows = dd.attackListAll || [];
+          if (!rows.length) return '';
+          const amods = comp.attackMods || {};
+          return `<details class="small"><summary style="cursor:pointer;color:var(--accent)">Attack adjustments <span class="muted">(per natural attack — feeds the Play tab)</span></summary>
+            <table class="data small" style="margin-top:4px"><tr><th>Attack</th><th>Dice</th><th class="num">Atk ±</th><th class="num">Dmg ±</th><th class="num">Show</th></tr>
+            ${rows.map(a => { const m = amods[a.label] || {}; return `<tr>
+              <td>${esc(a.label)}${a.count > 1 ? ' ×' + a.count : ''} <span class="muted">${a.secondary ? 'secondary (−5, ½ Str)' : 'primary'}${a.bonusDice ? ' + ' + esc(a.bonusDice) : ''}</span></td>
+              <td><input class="tiny" data-amod="${i}:${esc(a.label)}:dice" value="${esc(m.dice || '')}" placeholder="${esc(a.dice)}" title="override damage dice (blank = ${esc(a.dice)})"></td>
+              <td class="num"><input class="tiny" type="number" data-amod="${i}:${esc(a.label)}:atk" value="${m.atk || ''}" placeholder="0" title="extra to-hit for this attack"></td>
+              <td class="num"><input class="tiny" type="number" data-amod="${i}:${esc(a.label)}:dmg" value="${m.dmg || ''}" placeholder="0" title="extra damage for this attack"></td>
+              <td class="num"><input type="checkbox" data-amod="${i}:${esc(a.label)}:off" ${m.off ? '' : 'checked'} title="untick to hide this attack from the Play tab"></td>
+            </tr>`; }).join('')}</table>
+            <p class="muted" style="margin:4px 0 0">Secondary natural attacks take −5 to hit and ½ Str to damage automatically. "Attack enh." above covers an amulet of mighty fists.</p>
+          </details>`;
+        })() : ''}
       </div>`;
     }
 
@@ -3075,6 +3105,22 @@
     }));
     main.querySelectorAll('[data-cnat]').forEach(el => el.addEventListener('change', () => {
       c.companions[+el.dataset.cnat].miscNatArmor = parseInt(el.value, 10) || 0; save(); render();
+    }));
+    main.querySelectorAll('[data-catkenh]').forEach(el => el.addEventListener('change', () => {
+      c.companions[+el.dataset.catkenh].atkEnh = parseInt(el.value, 10) || 0; save(); render();
+    }));
+    // per-attack adjustments: data-amod="compIdx:label:field" (dice/atk/dmg/off)
+    main.querySelectorAll('[data-amod]').forEach(el => el.addEventListener('change', () => {
+      const [i, label, field] = el.dataset.amod.split(':');
+      const comp = c.companions[+i];
+      if (!comp.attackMods) comp.attackMods = {};
+      const key = label.toLowerCase();
+      const m = comp.attackMods[key] = comp.attackMods[key] || {};
+      if (field === 'off') m.off = !el.checked;
+      else if (field === 'dice') m.dice = el.value.trim();
+      else m[field] = parseInt(el.value, 10) || 0;
+      if (!m.atk && !m.dmg && !m.dice && !m.off) delete comp.attackMods[key];
+      save(); render();
     }));
     // ---- eidolon evolutions ----
     main.querySelectorAll('[data-addevo]').forEach(b => b.addEventListener('click', () => {

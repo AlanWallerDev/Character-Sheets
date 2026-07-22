@@ -574,6 +574,48 @@ check('brawler 2 base Ref = +3 (good Ref)', brt.ref === 3, brt);
   check('duplicate non-repeatable Large applies only once (+8 Str, size Large)',
     dupEff.abil.str === 8 && dupEff.size === 'Large', dupEff);
 
+  // ---- structured eidolon attacks (Play-tab chips) ----
+  {
+    const sc = PF.newCharacter('Serpent'); sc.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
+    const se = PF.newCompanion('eidolon'); se.form = 'Serpentine'; sc.companions = [se];
+    let d = PF.companionDerived(sc, se);
+    check('eidolon derivation emits a structured attack list', Array.isArray(d.attackList) && d.attackList.length >= 2, d.attackList);
+    let chips = PF.companionAttacks(sc, se, d);
+    const bite = chips.find(a => /^bite/.test(a.label));
+    const tail = chips.find(a => /^tail slap/.test(a.label));
+    const strM = PF.mod(d.abilities.str);
+    check('tail slap is secondary: −5 to hit vs bite', bite && tail && tail.atk === bite.atk - 5, { bite: bite && bite.atk, tail: tail && tail.atk });
+    check('secondary damage adds ½ Str', tail.dice === '1d6' + (Math.floor(strM / 2) ? '+' + Math.floor(strM / 2) : ''), tail.dice);
+    check('primary damage adds full Str', bite.dice === '1d6' + (strM ? '+' + strM : ''), bite.dice);
+    // Improved Damage steps the chosen attack's damage die
+    se.evolutions = [{ name: 'Improved Damage', choice: 'bite' }];
+    d = PF.companionDerived(sc, se);
+    check('Improved Damage (bite) steps 1d6 → 1d8', d.attackList.find(a => a.label === 'bite').dice === '1d8', d.attackList);
+    // Energy Attacks adds 1d6 of the chosen energy to every natural attack
+    se.evolutions = [{ name: 'Energy Attacks', choice: 'fire' }];
+    d = PF.companionDerived(sc, se);
+    check('Energy Attacks (fire) adds 1d6 fire bonus dice to attacks',
+      d.attackList.every(a => a.bonusDice === '1d6 fire'), d.attackList);
+    chips = PF.companionAttacks(sc, se, d);
+    check('energy bonus dice reach the roll chips', chips.some(a => a.bonusDice === '1d6 fire'), chips);
+    // amulet of mighty fists: enhancement to hit and damage on every natural attack
+    se.evolutions = [];
+    se.atkEnh = 1;
+    d = PF.companionDerived(sc, se);
+    const chips2 = PF.companionAttacks(sc, se, d);
+    const bite2 = chips2.find(a => /^bite/.test(a.label));
+    check('attack enhancement (+1) raises to-hit by 1', bite2.atk === bite.atk + 1, { was: bite.atk, now: bite2.atk });
+    check('attack enhancement (+1) raises damage by 1', bite2.dice === '1d6+' + (strM + 1), bite2.dice);
+    // per-attack build edits: dmg adjust and hide
+    se.atkEnh = 0;
+    se.attackMods = { 'tail slap': { atk: 0, dmg: 2, dice: '', off: false }, 'bite': { atk: 0, dmg: 0, dice: '', off: true } };
+    d = PF.companionDerived(sc, se);
+    const chips3 = PF.companionAttacks(sc, se, d);
+    check('hidden attack (bite) is dropped from the chips', !chips3.some(a => /^bite/.test(a.label)), chips3.map(a => a.label));
+    const tail3 = chips3.find(a => /^tail slap/.test(a.label));
+    check('per-attack damage adjustment applies (+2)', tail3.dice === '1d6+' + (Math.floor(strM / 2) + 2), tail3.dice);
+  }
+
   // maximum-attacks cap: base bite + claws(2) + sting(1) = 4 > L1 max of 3
   const at = PF.newCharacter('Attacker'); at.levels.push({ cls: 'Summoner', archetypes: [], hp: null, fcb: '' });
   const ae = PF.newCompanion('eidolon'); ae.form = 'Quadruped'; at.companions = [ae];

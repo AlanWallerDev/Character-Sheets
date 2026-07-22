@@ -109,7 +109,11 @@ Ultimate Wilderness, Pathfinder Unchained…), and the
   automatically costs double on Str/Con while the eidolon is Large or Huge, per the rules. The cleanly quantifiable evolutions (natural armor, ability increases, extra
   natural attacks, size increase) fold live into the eidolon's stat block; the rest are tracked with
   their rules text. A second meter tracks **natural attacks against the per-level maximum** (rake
-  excluded, per the rules) and flags an eidolon that's over the cap.
+  excluded, per the rules) and flags an eidolon that's over the cap. The Play tab's eidolon attack
+  chips roll with **real natural-attack rules** — secondary attacks (tail slap, hooves…) take −5 to
+  hit and ½ Str to damage, Improved Damage steps the die, Energy Attacks adds its 1d6 rider — and
+  each attack is **editable** on the Companions tab (to-hit/damage adjustments, dice override,
+  hide), with a natural-attack **enhancement field** for an amulet of mighty fists.
 - **Mythic** — optional mythic tier (1–10) and path (Archmage, Champion, Guardian, Hierophant,
   Marshal, Trickster) on a dedicated tab: tier-scaled universal features, a path-ability picker,
   mythic feats and mythic spells, with the mythic power pool and surge die tracked on the Play tab.

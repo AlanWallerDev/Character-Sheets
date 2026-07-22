@@ -925,6 +925,7 @@ const PF = (() => {
       name: '', species: '', form: 'Quadruped',
       effOverride: null, hpOverride: null, leadMod: 0,
       abilityOverride: {}, miscNatArmor: 0, evolutions: [],
+      atkEnh: 0, attackMods: {},
       attacks: '', tricks: '', gear: '', notes: '', linkedId: '',
     };
   }
@@ -980,6 +981,8 @@ const PF = (() => {
     'poison':           { kind: 'select', options: ['bite', 'sting'] },
     'skilled':          { kind: 'text', placeholder: 'skill' },
     'reach':            { kind: 'text', placeholder: 'which attack' },
+    'improved damage':  { kind: 'text', placeholder: 'attack (e.g. bite)' },
+    'bleed':            { kind: 'text', placeholder: 'attack (e.g. bite)' },
     'damage reduction': { kind: 'text', placeholder: 'e.g. magic, cold iron' },
     'weapon training':  { kind: 'text', placeholder: 'weapon group' },
     'basic magic':      { kind: 'text', placeholder: 'spell' },
@@ -1301,15 +1304,50 @@ const PF = (() => {
       // append evolution natural attacks, scaled to the eidolon's (possibly enlarged) size,
       // skipping any the base form already grants. Track the natural-attack count
       // against the level's Maximum Attacks — rake doesn't count toward that cap.
+      // A structured attackList is built alongside the display string so the Play
+      // tab can roll each attack with real rules (secondary −5 / ½ Str, per-attack
+      // edits) instead of re-parsing text.
       const szIdx = /Huge|Gargantuan|Colossal/.test(size) ? 2 : /Large/.test(size) ? 1 : 0;
+      const attackList = [];
+      const specOf = label => EVO_ATTACKS[evoMechKey(label)] || null;
+      // base-form attacks ("bite (1d6), 2 claws (1d4)") — primary/secondary from the attack map
+      for (const part of String(attacks).split(/[,;]/)) {
+        const m = /^(\d+)?\s*([A-Za-z' ]+?)\s*\((\d*d\d+)[^)]*\)/.exec(part.trim());
+        if (!m) continue;
+        const sp = specOf(m[2].trim());
+        attackList.push({ label: m[2].trim().toLowerCase(), count: parseInt(m[1] || '1', 10),
+                          dice: m[3], secondary: sp ? !!sp[4] : false, bonusDice: '' });
+      }
       let attackCount = countNaturalAttacks(attacks);   // base-form attacks
       for (const a of evo.attacks) {
         const spec = EVO_ATTACKS[a.key];
         if (new RegExp('\\b' + a.key + '\\b', 'i').test(attacks)) continue;
         const n = spec[3] * a.sel;
         attacks += (attacks ? ', ' : '') + (n > 1 ? n + ' ' : '') + a.key + ' (' + spec[szIdx] + ')';
+        attackList.push({ label: a.key, count: n, dice: spec[szIdx], secondary: !!spec[4], bonusDice: '' });
         if (a.key !== 'rake') attackCount += n;
       }
+      // evolutions that modify the attacks themselves
+      const DIE_STEP = { '1d2': '1d3', '1d3': '1d4', '1d4': '1d6', '1d6': '1d8', '1d8': '2d6', '2d6': '2d8', '2d8': '4d6' };
+      for (const ev of (comp.evolutions || [])) {
+        const mech = evoMechKey(ev.name);
+        if (mech === 'improved damage') {
+          // one damage-die step for the chosen attack type (each selection = a different attack)
+          const want = String(ev.choice || '').toLowerCase().trim();
+          const row2 = attackList.find(x => want && (x.label.includes(want) || want.includes(x.label)));
+          if (row2 && DIE_STEP[row2.dice]) row2.dice = DIE_STEP[row2.dice];
+        } else if (mech === 'energy attacks') {
+          // +1d6 of the chosen energy on every natural attack
+          const en = String(ev.choice || 'energy').toLowerCase();
+          for (const x of attackList) x.bonusDice = '1d6 ' + en;
+        }
+      }
+      // per-attack build edits (Companions tab): dice override / hide.
+      // attackListAll (pre-filter) feeds the editor so hidden attacks stay listed.
+      const amods = comp.attackMods || {};
+      out.attackListAll = attackList;
+      out.attackList = attackList.filter(x => !(amods[x.label] || {}).off)
+        .map(x => (amods[x.label] && amods[x.label].dice) ? Object.assign({}, x, { dice: amods[x.label].dice }) : x);
       const maxAtk = intIn(row['Max. Attacks']);
       out.attackCount = attackCount;
       out.maxAttacks = maxAtk;
@@ -1754,6 +1792,30 @@ const PF = (() => {
     const finesse = comp.type === 'familiar' && dexM > strM;
     const buffAtk = d.buffAtk || 0, buffDmg = d.buffDmg || 0;   // flat buff bonuses (Bless, Magic Fang…)
     const baseAtk = (d.bab || 0) + (finesse ? dexM : strM) + sizeM + ((comp.play || {}).atkMisc || 0) + buffAtk;
+    // natural-attack enhancement bonus (amulet of mighty fists) — to-hit and damage
+    const enh = parseInt(comp.atkEnh, 10) || 0;
+    // Structured attack list (eidolons): real rules per attack — secondary
+    // natural attacks take −5 to hit and ½ Str to damage; evolution bonus dice
+    // and per-attack build edits (Companions tab) are applied.
+    if (Array.isArray(d.attackList) && d.attackList.length) {
+      const amods = comp.attackMods || {};
+      for (const a of d.attackList) {
+        const ov = amods[a.label] || {};
+        const atk = baseAtk + enh + (a.secondary ? -5 : 0) + (parseInt(ov.atk, 10) || 0);
+        const dmgMod = (a.secondary ? Math.floor(strM / 2) : strM) + enh +
+          ((comp.play || {}).dmgMisc || 0) + buffDmg + (parseInt(ov.dmg, 10) || 0);
+        const dice = a.dice + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : '');
+        for (let i = 0; i < Math.min(a.count, 4); i++) {
+          out.push({
+            label: a.count > 1 ? `${a.label} ${i + 1}` : a.label,
+            atk, dice, bonusDice: a.bonusDice || '',
+            note: a.secondary ? 'secondary (−5, ½ Str)' : 'primary',
+          });
+        }
+      }
+      appendCustomAttacks();
+      return out;
+    }
     const src = d.attacks || '';
     for (let part of src.split(/[,;]/)) {
       part = part.trim();
@@ -1767,41 +1829,45 @@ const PF = (() => {
       if (!dm) continue;
       const dice = dm[1];
       // explicit damage modifier in the stat block (familiars) wins; otherwise add Str
-      const dmgMod = (dm[2] != null ? parseInt(dm[2].replace(/\s/g, ''), 10) : strM) + ((comp.play || {}).dmgMisc || 0) + buffDmg;
+      const dmgMod = (dm[2] != null ? parseInt(dm[2].replace(/\s/g, ''), 10) : strM) + enh + ((comp.play || {}).dmgMisc || 0) + buffDmg;
       const note = inParens.replace(/(\d*d\d+)\s*([+-]\s*\d+)?/, '').replace(/^\s*(plus|and)?\s*/, '').trim();
       for (let i = 0; i < Math.min(count, 4); i++) {
         out.push({
           label: count > 1 ? `${label} ${i + 1}` : label,
-          atk: baseAtk,
+          atk: baseAtk + enh,
           dice: dice + (dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : ''),
           note,
         });
       }
     }
-    const atkMiscPlay = (comp.play || {}).atkMisc || 0;
-    const dmgMiscPlay = (comp.play || {}).dmgMisc || 0;
-    (comp.play || {}).customAttacks?.forEach((ca, idx) => {
-      // legacy fixed-value attacks: {label, atk, dice}
-      if (ca.atkAbility === undefined && ca.atk !== undefined) {
-        out.push({ label: ca.label, atk: (ca.atk || 0) + atkMiscPlay + buffAtk, dice: ca.dice || '',
-                   bonusDice: ca.bonusDice || '', note: 'custom', customIdx: idx });
-        return;
-      }
-      // dynamic attacks: recompute from the companion's live stats + play adjustments
-      const count = Math.max(1, Math.min(8, parseInt(ca.count, 10) || 1));
-      const abMod = (ca.atkAbility && ca.atkAbility !== 'none') ? mod(d.abilities[ca.atkAbility] || 10) : 0;
-      const secondary = ca.type === 'secondary' ? -5 : 0;   // secondary natural attacks take −5 to hit
-      const atk = (d.bab || 0) + abMod + sizeM + atkMiscPlay + (parseInt(ca.atkBonus, 10) || 0) + buffAtk + secondary;
-      let dmgFlat = (parseInt(ca.dmgBonus, 10) || 0) + dmgMiscPlay + buffDmg;
-      const mult = parseFloat(ca.dmgMult);
-      if (mult) dmgFlat += Math.floor(strM * mult);
-      const diceStr = (ca.dice || '') + (dmgFlat ? (dmgFlat > 0 ? '+' : '') + dmgFlat : '');
-      for (let i = 0; i < count; i++) {
-        out.push({ label: count > 1 ? `${ca.label} ${i + 1}` : ca.label, atk,
-                   dice: diceStr, bonusDice: ca.bonusDice || '', note: 'custom', customIdx: idx });
-      }
-    });
+    appendCustomAttacks();
     return out;
+
+    function appendCustomAttacks() {
+      const atkMiscPlay = (comp.play || {}).atkMisc || 0;
+      const dmgMiscPlay = (comp.play || {}).dmgMisc || 0;
+      (comp.play || {}).customAttacks?.forEach((ca, idx) => {
+        // legacy fixed-value attacks: {label, atk, dice}
+        if (ca.atkAbility === undefined && ca.atk !== undefined) {
+          out.push({ label: ca.label, atk: (ca.atk || 0) + atkMiscPlay + buffAtk, dice: ca.dice || '',
+                     bonusDice: ca.bonusDice || '', note: 'custom', customIdx: idx });
+          return;
+        }
+        // dynamic attacks: recompute from the companion's live stats + play adjustments
+        const count = Math.max(1, Math.min(8, parseInt(ca.count, 10) || 1));
+        const abMod = (ca.atkAbility && ca.atkAbility !== 'none') ? mod(d.abilities[ca.atkAbility] || 10) : 0;
+        const secondary = ca.type === 'secondary' ? -5 : 0;   // secondary natural attacks take −5 to hit
+        const atk = (d.bab || 0) + abMod + sizeM + atkMiscPlay + (parseInt(ca.atkBonus, 10) || 0) + buffAtk + secondary;
+        let dmgFlat = (parseInt(ca.dmgBonus, 10) || 0) + dmgMiscPlay + buffDmg;
+        const mult = parseFloat(ca.dmgMult);
+        if (mult) dmgFlat += Math.floor(strM * mult);
+        const diceStr = (ca.dice || '') + (dmgFlat ? (dmgFlat > 0 ? '+' : '') + dmgFlat : '');
+        for (let i = 0; i < count; i++) {
+          out.push({ label: count > 1 ? `${ca.label} ${i + 1}` : ca.label, atk,
+                     dice: diceStr, bonusDice: ca.bonusDice || '', note: 'custom', customIdx: idx });
+        }
+      });
+    }
   }
 
   // ---------- feat prerequisites ----------
