@@ -47,13 +47,14 @@ const Library = (() => {
     attack: 'attack rolls', damage: 'damage', armor: 'armor AC', natural: 'natural armor',
     deflection: 'deflection AC', dodge: 'dodge AC', acMisc: 'AC', fort: 'Fort', ref: 'Ref',
     will: 'Will', saves: 'all saves', skills: 'all skills', init: 'initiative', speed: 'speed',
-    cmb: 'CMB', cmd: 'CMD', carryStr: 'carry capacity (Str)', carryMult: '× carry capacity',
+    cmb: 'CMB', cmd: 'CMD', hpMax: 'max HP', carryStr: 'carry capacity (Str)', carryMult: '× carry capacity',
   };
 
   function changesText(changes) {
     return (changes || []).map(ch => {
       if (ch.target === 'carryMult') return `×${ch.value} carry capacity`;
-      return `${ch.value >= 0 ? '+' : ''}${ch.value} ${CHANGE_LABELS[ch.target] || ch.target}` +
+      const label = ch.target === 'skill' ? esc(ch.skill || 'a skill') : (CHANGE_LABELS[ch.target] || ch.target);
+      return `${ch.value >= 0 ? '+' : ''}${ch.value} ${label}` +
         (ch.type && ch.type !== 'untyped' ? ` (${ch.type})` : '');
     }).join(', ');
   }

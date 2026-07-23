@@ -86,7 +86,7 @@ const Sheet = (() => {
         cmb: 'CMB', cmd: 'CMD', fort: 'Fort', ref: 'Ref', will: 'Will', saves: 'all saves',
         natural: 'natural armor', deflection: 'deflection AC', dodge: 'dodge AC', armor: 'armor AC', acMisc: 'AC' };
       h += `<p class="small muted">Trait &amp; feature bonuses applied above: ` + fchg.map(ch =>
-        `${ch.value >= 0 ? '+' : ''}${ch.value} ${esc(LBL[ch.target] || ch.target)} <span class="tag">(${esc(ch.source)})</span>`).join(', ') + `</p>`;
+        `${ch.value >= 0 ? '+' : ''}${ch.value} ${esc(ch.target === 'skill' ? (ch.skill || 'skill') : (LBL[ch.target] || ch.target))} <span class="tag">(${esc(ch.source)})</span>`).join(', ') + `</p>`;
     }
 
     // attacks (ammunition is excluded here and tracked separately below)

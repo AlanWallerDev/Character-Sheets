@@ -166,7 +166,13 @@
   const intMap = o => { const out = {}; if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) out[k] = toInt(v); return out; };
   const abMap = (o, def) => { const out = {}; for (const ab of PF.ABILITIES) out[ab] = toInt(o && o[ab], def); return out; };
 
-  const sanChange = ch => ({ target: word(ch.target), type: word(ch.type) || 'untyped', value: toNum(ch.value) });
+  const sanChange = ch => {
+    const out = { target: word(ch.target), type: word(ch.type) || 'untyped', value: toNum(ch.value) };
+    // named-skill changes carry the skill; letters/space/()/' only — the name is
+    // rendered by changesText and the buff editor
+    if (ch.skill != null && ch.skill !== '') out.skill = toStr(ch.skill).replace(/[^a-zA-Z()' ]/g, '').slice(0, 40);
+    return out;
+  };
   function sanBuff(b) {
     const out = { name: toStr(b.name), active: !!b.active, note: toStr(b.note),
                   changes: objArr(b.changes, sanChange) };
@@ -1145,12 +1151,12 @@
     ['armor', 'Armor bonus (AC)'], ['natural', 'Natural armor (AC)'],
     ['deflection', 'Deflection (AC)'], ['dodge', 'Dodge (AC)'], ['acMisc', 'Misc AC'],
     ['fort', 'Fortitude'], ['ref', 'Reflex'], ['will', 'Will'], ['saves', 'All saves'],
-    ['skills', 'All skills'], ['init', 'Initiative'], ['speed', 'Speed (ft)'],
-    ['cmb', 'CMB'], ['cmd', 'CMD'],
+    ['skills', 'All skills'], ['skill', 'One skill (named)'], ['init', 'Initiative'], ['speed', 'Speed (ft)'],
+    ['cmb', 'CMB'], ['cmd', 'CMD'], ['hpMax', 'Max HP'],
     ['carryStr', 'Carrying capacity (+Str)'], ['carryMult', 'Carrying capacity (× multiplier)'],
   ];
   const BUFF_TYPES = ['untyped', 'enhancement', 'morale', 'competence', 'luck', 'sacred',
-    'profane', 'insight', 'resistance', 'alchemical', 'circumstance', 'size', 'dodge', 'racial'];
+    'profane', 'insight', 'resistance', 'alchemical', 'circumstance', 'size', 'dodge', 'racial', 'trait'];
 
   function customBuffForm(onSave, existing) {
     let rows = existing ? JSON.parse(JSON.stringify(existing.changes || [])) : [{ target: 'attack', type: 'untyped', value: 1 }];
@@ -1169,18 +1175,27 @@
         <h4>Effects <span class="small muted">— same-type bonuses don't stack; dodge/untyped/circumstance do; use negatives for penalties</span></h4>
         <table class="data" style="width:100%"><tr><th>Affects</th><th>Bonus type</th><th class="num">Value</th><th></th></tr>
           ${rows.map((r, i) => `<tr>
-            <td><select data-bf-target="${i}">${tOpts(r.target)}</select></td>
+            <td><select data-bf-target="${i}">${tOpts(r.target)}</select>
+              ${r.target === 'skill' ? `<input data-bf-skill="${i}" list="bf-skill-list" value="${esc(r.skill || '')}" placeholder="which skill" style="width:130px;margin-left:4px">` : ''}</td>
             <td><select data-bf-type="${i}">${yOpts(r.type)}</select></td>
             <td class="num"><input class="tiny" type="number" data-bf-val="${i}" value="${r.value}"></td>
             <td><button class="small danger" data-bf-del="${i}">✕</button></td>
           </tr>`).join('')}
         </table>
+        <datalist id="bf-skill-list">${(PFDATA.skills || []).map(s => `<option value="${esc(s.name)}">`).join('')}
+          ${['arcana', 'dungeoneering', 'engineering', 'geography', 'history', 'local', 'nature', 'nobility', 'planes', 'religion'].map(k => `<option value="Knowledge (${k})">`).join('')}</datalist>
         <button class="small" id="bf-addrow">+ add effect</button>
         <div style="margin-top:12px"><button class="primary" id="bf-save">${existing ? 'Save changes' : 'Add to play'}</button></div>`;
       // keep name/note in sync so they survive table redraws
       m.body.querySelector('#bf-name').addEventListener('input', e => { name = e.target.value; });
       m.body.querySelector('#bf-note').addEventListener('input', e => { note = e.target.value; });
-      m.body.querySelectorAll('[data-bf-target]').forEach(el => el.addEventListener('change', () => { rows[+el.dataset.bfTarget].target = el.value; }));
+      m.body.querySelectorAll('[data-bf-target]').forEach(el => el.addEventListener('change', () => {
+        const r = rows[+el.dataset.bfTarget];
+        r.target = el.value;
+        if (r.target !== 'skill') delete r.skill;
+        draw();   // redraw so the skill-name input appears/disappears
+      }));
+      m.body.querySelectorAll('[data-bf-skill]').forEach(el => el.addEventListener('change', () => { rows[+el.dataset.bfSkill].skill = el.value.trim(); }));
       m.body.querySelectorAll('[data-bf-type]').forEach(el => el.addEventListener('change', () => { rows[+el.dataset.bfType].type = el.value; }));
       m.body.querySelectorAll('[data-bf-val]').forEach(el => el.addEventListener('change', () => { rows[+el.dataset.bfVal].value = parseInt(el.value, 10) || 0; }));
       m.body.querySelectorAll('[data-bf-del]').forEach(el => el.addEventListener('click', () => { rows.splice(+el.dataset.bfDel, 1); if (!rows.length) rows.push({ target: 'attack', type: 'untyped', value: 0 }); draw(); }));
@@ -1189,7 +1204,11 @@
         name = m.body.querySelector('#bf-name').value.trim();
         if (!name) { m.body.querySelector('#bf-name').focus(); return; }
         note = m.body.querySelector('#bf-note').value.trim();
-        const changes = rows.filter(r => r.value).map(r => ({ target: r.target, type: r.type, value: r.value }));
+        const changes = rows.filter(r => r.value).map(r => {
+          const ch = { target: r.target, type: r.type, value: r.value };
+          if (r.target === 'skill' && r.skill) ch.skill = String(r.skill).replace(/[^a-zA-Z()' ]/g, '').slice(0, 40);
+          return ch;
+        });
         m.close();
         onSave({ name, active: true, custom: true, note, changes });
       });
@@ -1603,7 +1622,7 @@
                 <div class="small muted">${Library.changesText(b.changes) || ''}${b.note ? ' — ' + esc(b.note) : ''}</div>
                 ${b.scales ? '<div class="small warn">scales with level — edit values below</div>' : ''}
                 ${b.active && b.changes && b.changes.length ? `<details class="small"><summary style="cursor:pointer;color:var(--accent)">edit values</summary>
-                  ${b.changes.map((ch, j) => `<label style="margin-right:8px">${esc(ch.target)}
+                  ${b.changes.map((ch, j) => `<label style="margin-right:8px">${esc(ch.target === 'skill' ? (ch.skill || 'skill') : ch.target)}
                     <input class="tiny" type="number" data-bval="${i}:${j}" value="${ch.value}"></label>`).join('')}
                 </details>` : ''}
               </td>

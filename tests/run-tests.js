@@ -221,6 +221,65 @@ for (const [cls, level, bundle, abilities] of bundleCombos) {
   check('genuine "all skill checks" bonus still maps to skills',
     PF.parseChanges('<p>+2 competence bonus on all skill checks.</p>', { permanent: true })
       .some(x => x.target === 'skills'));
+  // …and the named skill now auto-applies to THAT skill (target 'skill' + name)
+  check('named-skill trait emits a single-skill change (Use Magic Device)',
+    fc.some(x => x.target === 'skill' && x.skill === 'Use Magic Device' && x.value === 1), fc);
+  check('the single-skill bonus reaches that skill via effective()',
+    (parseInt(es.skillMisc['Use Magic Device'], 10) || 0) === 1, es.skillMisc);
+}
+
+// ---------------- buff targets: named skill / attack→CMB / max HP ----------------
+{
+  // parser: "+10 competence bonus on Stealth checks" → single-skill change
+  const p1 = PF.parseChanges('<p>You gain a +10 competence bonus on Stealth checks.</p>');
+  check('parser captures a named-skill bonus with its skill',
+    p1.some(x => x.target === 'skill' && x.skill === 'Stealth' && x.value === 10 && x.type === 'competence'), p1);
+  const p2 = PF.parseChanges('<p>You gain a +2 bonus on Knowledge (arcana) checks.</p>');
+  check('parser keeps the Knowledge subskill', p2.some(x => x.target === 'skill' && x.skill === 'Knowledge (arcana)'), p2);
+  const p3 = PF.parseChanges('<p>You gain a +20 enhancement bonus to fly speed.</p>');
+  check('"fly speed" is a speed bonus, not the Fly skill',
+    p3.some(x => x.target === 'speed') && !p3.some(x => x.target === 'skill'), p3);
+  const p4 = PF.parseChanges('<p>You gain a +2 bonus on Perception and Sense Motive checks.</p>');
+  check('two named skills in one clause both captured',
+    ['Perception', 'Sense Motive'].every(n => p4.some(x => x.target === 'skill' && x.skill === n)), p4);
+
+  const b = PF.newCharacter('Buffed');
+  b.levels.push({ cls: 'Fighter', archetypes: [], hp: null, fcb: '' });
+  b.skills['Stealth'] = 1;
+  b.play = PF.newPlayState();
+  b.play.buffs = [{ name: 'Sneaky Cloak', active: true, changes: [{ target: 'skill', skill: 'Stealth', type: 'competence', value: 5 }] }];
+  let eb = PF.effective(b);
+  const baseStealth = PF.skillBonus(b, 'Stealth');
+  check('single-skill buff raises only that skill (+5 Stealth)',
+    PF.skillBonus(eb, 'Stealth') === baseStealth + 5, { base: baseStealth, buffed: PF.skillBonus(eb, 'Stealth') });
+  check('other skills untouched by a single-skill buff',
+    PF.skillBonus(eb, 'Perception') === PF.skillBonus(b, 'Perception'));
+  // same-type stacking applies inside the skill bucket: competence +2 and +5 → +5
+  b.play.buffs.push({ name: 'Lesser Cloak', active: true, changes: [{ target: 'skill', skill: 'Stealth', type: 'competence', value: 2 }] });
+  eb = PF.effective(b);
+  check('same-type single-skill bonuses take the best, not the sum',
+    PF.skillBonus(eb, 'Stealth') === baseStealth + 5, PF.skillBonus(eb, 'Stealth'));
+
+  // attack-roll bonuses apply to CMB (maneuver checks are attack rolls)
+  b.play.buffs = [{ name: 'Bless', active: true, changes: [{ target: 'attack', type: 'luck', value: 2 }] }];
+  eb = PF.effective(b);
+  check('attack buff (+2) raises CMB by 2',
+    PF.combatManeuvers(eb).cmb === PF.combatManeuvers(b).cmb + 2,
+    { base: PF.combatManeuvers(b).cmb, buffed: PF.combatManeuvers(eb).cmb });
+  check('attack buff does not touch CMD', PF.combatManeuvers(eb).cmd === PF.combatManeuvers(b).cmd);
+  // the Shaken condition's −2 attack now correctly drops CMB too
+  b.play.buffs = [JSON.parse(JSON.stringify(PF.CONDITIONS.find(x => x.name === 'Shaken')))];
+  b.play.buffs[0].active = true;
+  eb = PF.effective(b);
+  check('Shaken (−2 attack) lowers CMB by 2', PF.combatManeuvers(eb).cmb === PF.combatManeuvers(b).cmb - 2,
+    PF.combatManeuvers(eb).cmb);
+
+  // max-HP target
+  b.play.buffs = [{ name: 'Vitality', active: true, changes: [{ target: 'hpMax', type: 'untyped', value: 10 }] }];
+  eb = PF.effective(b);
+  check('hpMax buff (+10) raises max HP by 10',
+    PF.hpBreakdown(eb).total === PF.hpBreakdown(b).total + 10,
+    { base: PF.hpBreakdown(b).total, buffed: PF.hpBreakdown(eb).total });
 }
 
 // ---------------- class-ability prerequisites ----------------

@@ -1520,14 +1520,32 @@ const PF = (() => {
   // "on <Skill Name> checks" targets that one skill, which the engine models via
   // per-skill skillMisc — it must NOT fold into the all-skills skillMiscAll the
   // 'skills' target maps to. Built lazily so PFDATA.skills is loaded first.
-  let _namedSkillRe;
+  let _namedSkillRe, _namedSkillCapRe;
+  function skillNamePattern() {
+    return (PFDATA.skills || []).map(s => s.name)
+      .sort((a, b) => b.length - a.length)                 // longest first: match "Sleight of Hand" before "Hand"
+      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|');
+  }
   function namedSkillRe() {
     if (_namedSkillRe) return _namedSkillRe;
-    const names = (PFDATA.skills || []).map(s => s.name)
-      .sort((a, b) => b.length - a.length)                 // longest first: match "Sleight of Hand" before "Hand"
-      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    _namedSkillRe = names.length ? new RegExp('\\b(?:' + names.join('|') + ')\\b', 'i') : /$^/;
+    const p = skillNamePattern();
+    _namedSkillRe = p ? new RegExp('\\b(?:' + p + ')\\b', 'i') : /$^/;
     return _namedSkillRe;
+  }
+  // capturing + global variant: base skill name and an optional "(subskill)"
+  function namedSkillCapRe() {
+    if (_namedSkillCapRe) return _namedSkillCapRe;
+    const p = skillNamePattern();
+    _namedSkillCapRe = p ? new RegExp('\\b(' + p + ")(\\s*\\(([a-zA-Z' ]+)\\))?", 'gi') : /$^/g;
+    return _namedSkillCapRe;
+  }
+  // "use magic device" → the data's canonical casing; subskills lowercased to
+  // match the Skills tab's row naming ("Knowledge (arcana)")
+  function canonicalSkillName(base, sub) {
+    const entry = (PFDATA.skills || []).find(s => s.name.toLowerCase() === String(base).toLowerCase());
+    const name = entry ? entry.name : base;
+    return name + (sub ? ' (' + String(sub).trim().toLowerCase() + ')' : '');
   }
 
   function phraseToTargets(phrase, type) {
@@ -1544,9 +1562,19 @@ const PF = (() => {
     if (/initiative/.test(p)) out.add('init');
     if (/\bspeed\b/.test(p)) out.add('speed');
     // Only a genuine all-skills bonus maps to 'skills'. A named-skill bonus
-    // ("+1 on Use Magic Device checks") or class-skill wording ("… is always a
-    // class skill") must not inflate every skill via skillMiscAll.
+    // ("+1 on Use Magic Device checks") targets that ONE skill — emitted as a
+    // {t:'skill', skill} object; class-skill wording ("… is always a class
+    // skill") must not inflate every skill via skillMiscAll.
     if (/skill check|\bskills?\b/.test(p) && !/\bclass skill\b/.test(p) && !namedSkillRe().test(p)) out.add('skills');
+    // scope the capture to "… checks" so trailing clauses ("and X is always a
+    // class skill") don't block it, and "fly speed" never reads as the Fly skill
+    const ck = /^(.*?\bchecks?\b)/i.exec(phrase);
+    if (ck && !/\bclass skill\b/i.test(ck[1])) {
+      const re = namedSkillCapRe();
+      re.lastIndex = 0;
+      let sm;
+      while ((sm = re.exec(ck[1]))) out.add(JSON.stringify({ t: 'skill', skill: canonicalSkillName(sm[1], sm[3]) }));
+    }
     if (/combat maneuver defense|\bcmd\b/.test(p)) out.add('cmd');
     else if (/combat maneuver|\bcmb\b/.test(p)) out.add('cmb');
     const fort = /fortitude/.test(p), ref = /reflex/.test(p), will = /\bwill\b/.test(p);
@@ -1591,7 +1619,13 @@ const PF = (() => {
         const key = tgt + ':' + val;
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ target: tgt, type: stackType, value: val });
+        // named-skill targets travel as JSON ({t:'skill', skill}) for Set dedup
+        if (tgt.charAt(0) === '{') {
+          const o = JSON.parse(tgt);
+          out.push({ target: 'skill', skill: o.skill, type: stackType, value: val });
+        } else {
+          out.push({ target: tgt, type: stackType, value: val });
+        }
       }
       if (out.length >= 12) break;
     }
@@ -1623,7 +1657,11 @@ const PF = (() => {
   // and choice-specific (Weapon Focus → selected weapon) bonuses out.
   function featureChanges(c) {
     const out = [];
-    const collect = (entry, src) => { for (const ch of entryChanges(entry)) out.push({ target: ch.target, type: ch.type, value: ch.value, source: src }); };
+    const collect = (entry, src) => { for (const ch of entryChanges(entry)) {
+      const o = { target: ch.target, type: ch.type, value: ch.value, source: src };
+      if (ch.skill) o.skill = ch.skill;
+      out.push(o);
+    } };
     for (const tn of (c.traits || [])) collect((PFDATA.traits || []).find(x => x.name === tn), tn);
     for (const an of (c.altTraits || [])) collect(getRacialTrait(an), an);
     for (const a of (c.classAbilities || [])) collect(getClassAbility(a.name), a.name);
@@ -1669,6 +1707,8 @@ const PF = (() => {
     _buffLib = null;
     _featIndex = null;
     _abilIndex = null;
+    _namedSkillRe = null;
+    _namedSkillCapRe = null;
   }
   function buffLibrary() {
     if (_buffLib) return _buffLib;
@@ -1719,10 +1759,13 @@ const PF = (() => {
     const e = JSON.parse(JSON.stringify(c));
     e.__buffed = active.length > 0 || playPen;
     const buckets = {};
-    for (const ch of feats) (buckets[ch.target] = buckets[ch.target] || []).push(ch);
+    // named-skill changes bucket per skill ("skill:Perception") so same-type
+    // stacking applies within each skill independently
+    const keyOf = ch => ch.target === 'skill' ? 'skill:' + String(ch.skill || '').trim() : ch.target;
+    for (const ch of feats) (buckets[keyOf(ch)] = buckets[keyOf(ch)] || []).push(ch);
     for (const b of active) {
       for (const ch of b.changes || []) {
-        (buckets[ch.target] = buckets[ch.target] || []).push(ch);
+        (buckets[keyOf(ch)] = buckets[keyOf(ch)] || []).push(ch);
       }
     }
     const t = k => buckets[k] ? stackTotal(buckets[k]) : 0;
@@ -1741,12 +1784,21 @@ const PF = (() => {
     cb.miscWill = (cb.miscWill || 0) + t('will') + saves;
     cb.miscInit = (cb.miscInit || 0) + t('init');
     cb.speedMisc = (cb.speedMisc || 0) + t('speed');
-    cb.miscCMB = (cb.miscCMB || 0) + t('cmb');
+    // CMB checks are attack rolls, so attack-roll bonuses/penalties (Bless,
+    // Shaken…) apply to them as well as to weapon attacks
+    cb.miscCMB = (cb.miscCMB || 0) + t('cmb') + t('attack');
     cb.miscCMD = (cb.miscCMD || 0) + t('cmd');
+    cb.hpMisc = (cb.hpMisc || 0) + t('hpMax');
     cb.carryStrBonus = (cb.carryStrBonus || 0) + t('carryStr');
     // carry multiplier doesn't add — take the best multiplier among active effects
     if (buckets['carryMult']) cb.carryMult = Math.max(cb.carryMult || 1, ...buckets['carryMult'].map(ch => ch.value || 1));
     e.skillMiscAll = (e.skillMiscAll || 0) + t('skills');
+    // per-skill buckets → that skill's misc column
+    for (const k of Object.keys(buckets)) {
+      if (k.slice(0, 6) !== 'skill:') continue;
+      const nm = k.slice(6);
+      if (nm) e.skillMisc[nm] = (parseInt(e.skillMisc[nm], 10) || 0) + stackTotal(buckets[k]);
+    }
     // live play-state penalties (Play tab only, like buffs):
     // ability damage/drain — lower the score directly; the ability modifier
     // then drops 1 per 2 points, and Con damage feeds max HP via hpBreakdown
